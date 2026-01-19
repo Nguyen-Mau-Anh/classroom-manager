@@ -45,7 +45,7 @@ development_status:
   epic-0: in-progress
   0-1-repository-structure-and-ci-pipeline: done
   0-2-docker-development-environment: done
-  0-3-database-schema-and-prisma-setup: backlog
+  0-3-database-schema-and-prisma-setup: done
   0-4-authentication-system: backlog
   0-5-api-foundation-and-error-handling: backlog
   0-6-deployment-pipeline-staging: backlog

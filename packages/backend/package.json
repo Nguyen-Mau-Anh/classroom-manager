@@ -12,7 +12,11 @@
     "prisma": "prisma",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@classroom-manager/shared": "workspace:*",
@@ -25,6 +29,7 @@
     "@types/supertest": "^6.0.3",
     "prisma": "^5.9.1",
     "supertest": "^7.2.2",
+    "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }
 }

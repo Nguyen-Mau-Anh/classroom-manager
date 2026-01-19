@@ -1,6 +1,5 @@
-// Prisma schema file
-// This is a placeholder schema for Docker builds
-// Full schema will be implemented in Story 0.3
+// Prisma schema for classroom-manager
+// Implements all 11 models from architecture.md
 
 generator client {
   provider = "prisma-client-js"
@@ -11,8 +10,187 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Placeholder model - will be replaced in Story 0.3
-model Placeholder {
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum AbsenceStatus {
+  PENDING
+  APPROVED
+  COVERED
+  CANCELLED
+}
+
+enum TimeSlotStatus {
+  SCHEDULED
+  CANCELLED
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         UserRole
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teacher       Teacher?
+  student       Student?
+  notifications Notification[]
+}
+
+model Teacher {
   id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  phone     String?
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  qualifications TeacherQualification[]
+  timeSlots      TimeSlot[]
+  absences       TeacherAbsence[]
+  substitutions  TeacherAbsence[]       @relation("SubstituteTeacher")
+}
+
+model Student {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id])
+  name       String
+  gradeLevel Int
+  classId    String?
+  class      Class?   @relation(fields: [classId], references: [id])
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  enrollments Enrollment[]
+}
+
+model Subject {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?
+  isMandatory Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  prerequisites   Subject[]              @relation("SubjectPrerequisites")
+  prerequisiteOf  Subject[]              @relation("SubjectPrerequisites")
+  qualifications  TeacherQualification[]
+  timeSlots       TimeSlot[]
+  enrollments     Enrollment[]
+}
+
+model TeacherQualification {
+  id        String   @id @default(cuid())
+  teacherId String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id])
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([teacherId, subjectId])
+}
+
+model Class {
+  id         String   @id @default(cuid())
+  name       String
+  gradeLevel Int
+  capacity   Int      @default(50)
+  roomId     String?
+  room       Room?    @relation(fields: [roomId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  students  Student[]
+  timeSlots TimeSlot[]
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  name      String
+  capacity  Int
+  type      String   @default("classroom") // classroom, lab, gym
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  classes   Class[]
+  timeSlots TimeSlot[]
+}
+
+model TimeSlot {
+  id        String         @id @default(cuid())
+  dayOfWeek Int // 0=Sunday, 1=Monday, etc.
+  startTime String // "08:00"
+  endTime   String // "09:30"
+  classId   String
+  class     Class          @relation(fields: [classId], references: [id])
+  subjectId String
+  subject   Subject        @relation(fields: [subjectId], references: [id])
+  teacherId String
+  teacher   Teacher        @relation(fields: [teacherId], references: [id])
+  roomId    String
+  room      Room           @relation(fields: [roomId], references: [id])
+  status    TimeSlotStatus @default(SCHEDULED)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([dayOfWeek, startTime])
+  @@index([teacherId, dayOfWeek])
+  @@index([roomId, dayOfWeek])
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, subjectId])
+}
+
+model TeacherAbsence {
+  id                  String        @id @default(cuid())
+  teacherId           String
+  teacher             Teacher       @relation(fields: [teacherId], references: [id])
+  date                DateTime      @db.Date
+  reason              String?
+  status              AbsenceStatus @default(PENDING)
+  substituteTeacherId String?
+  substituteTeacher   Teacher?      @relation("SubstituteTeacher", fields: [substituteTeacherId], references: [id])
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([teacherId, date])
+  @@index([date, status])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
 }
