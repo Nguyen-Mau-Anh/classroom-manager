@@ -397,10 +397,9 @@ describe('Prisma Schema', () => {
 
       expect(result).not.toBeNull();
       expect(result!.enrollments).toHaveLength(2);
-      expect(result!.enrollments.map((e: { subject: { name: string } }) => e.subject.name).sort()).toEqual([
-        'Subject 1',
-        'Subject 2',
-      ]);
+      expect(
+        result!.enrollments.map((e: { subject: { name: string } }) => e.subject.name).sort()
+      ).toEqual(['Subject 1', 'Subject 2']);
 
       // Test unique constraint
       await expect(
