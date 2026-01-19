@@ -1,5 +1,5 @@
-// packages/backend/prisma/schema.prisma
-// Minimal schema for Docker development environment
+// Prisma schema file
+// This is a placeholder schema for Docker builds
 // Full schema will be implemented in Story 0.3
 
 generator client {
@@ -11,9 +11,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Placeholder model for initial setup
-model HealthCheck {
+// Placeholder model - will be replaced in Story 0.3
+model Placeholder {
   id        String   @id @default(cuid())
-  status    String
-  checkedAt DateTime @default(now())
+  createdAt DateTime @default(now())
 }

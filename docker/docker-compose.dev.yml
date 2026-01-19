@@ -1,35 +1,45 @@
+# Development Docker Compose with Hot Reload Support
+# Use: docker compose -f docker/docker-compose.dev.yml up
+
 services:
+  # Development frontend with Vite HMR
   frontend:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.frontend
+      dockerfile: docker/Dockerfile.frontend.dev
     ports:
-      - "3000:80"
-    depends_on:
-      backend:
-        condition: service_healthy
+      - "3000:3000"
+    volumes:
+      - ../packages/frontend/src:/app/packages/frontend/src
+      - ../packages/shared/src:/app/packages/shared/src
     environment:
       - VITE_API_URL=http://localhost:4000
+    depends_on:
+      - backend
     networks:
       - classroom-network
 
+  # Development backend with file watching
   backend:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.backend
+      dockerfile: docker/Dockerfile.backend.dev
     ports:
       - "4000:4000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    volumes:
+      - ../packages/backend/src:/app/packages/backend/src
+      - ../packages/shared/src:/app/packages/shared/src
     environment:
       - NODE_ENV=development
       - DATABASE_URL=postgresql://classroom:classroom@postgres:5432/classroom
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=dev-secret-change-in-production
       - PORT=4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - classroom-network
 
