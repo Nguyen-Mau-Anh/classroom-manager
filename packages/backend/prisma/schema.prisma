@@ -1,0 +1,19 @@
+// packages/backend/prisma/schema.prisma
+// Minimal schema for Docker development environment
+// Full schema will be implemented in Story 0.3
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Placeholder model for initial setup
+model HealthCheck {
+  id        String   @id @default(cuid())
+  status    String
+  checkedAt DateTime @default(now())
+}
