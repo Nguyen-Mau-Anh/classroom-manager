@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma Client
+        run: pnpm --filter backend prisma generate
+
       - name: Run ESLint
         run: pnpm lint
 
@@ -58,6 +61,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter backend prisma generate
 
       - name: Run TypeScript check
         run: pnpm typecheck
@@ -107,6 +113,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma Client
+        run: pnpm --filter backend prisma generate
+
       - name: Run unit tests
         run: pnpm test:ci
         env:
@@ -140,6 +149,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter backend prisma generate
 
       - name: Build all packages
         run: pnpm build
