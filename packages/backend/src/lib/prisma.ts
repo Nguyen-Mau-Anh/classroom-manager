@@ -26,10 +26,14 @@ export async function disconnectPrisma(): Promise<void> {
 }
 
 // Handle process termination signals
-const handleShutdown = async (signal: string) => {
+const handleShutdown = (signal: string): void => {
   console.log(`Received ${signal}, disconnecting Prisma...`);
-  await disconnectPrisma();
-  process.exit(0);
+  disconnectPrisma()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('Error during Prisma disconnect:', err);
+      process.exit(1);
+    });
 };
 
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));

@@ -109,7 +109,7 @@ describe('Prisma Schema', () => {
   describeWithDb('Teacher -> TeacherQualification -> Subject relationship', () => {
     it('should allow querying teacher with qualifications and subjects', async () => {
       const email = uniqueEmail('teacher-qual');
-      const user = await prisma.user.create({
+      const user = await prisma!.user.create({
         data: {
           email,
           passwordHash: 'test-hash',
@@ -117,14 +117,14 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const subject = await prisma.subject.create({
+      const subject = await prisma!.subject.create({
         data: {
           name: 'Test Subject',
           code: `TEST-${Date.now()}`,
         },
       });
 
-      const teacher = await prisma.teacher.create({
+      const teacher = await prisma!.teacher.create({
         data: {
           userId: user.id,
           name: 'Test Teacher',
@@ -134,7 +134,7 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const result = await prisma.teacher.findUnique({
+      const result = await prisma!.teacher.findUnique({
         where: { id: teacher.id },
         include: {
           qualifications: {
@@ -148,17 +148,17 @@ describe('Prisma Schema', () => {
       expect(result!.qualifications[0].subject.name).toBe('Test Subject');
 
       // Cleanup
-      await prisma.teacherQualification.deleteMany({ where: { teacherId: teacher.id } });
-      await prisma.teacher.delete({ where: { id: teacher.id } });
-      await prisma.user.delete({ where: { id: user.id } });
-      await prisma.subject.delete({ where: { id: subject.id } });
+      await prisma!.teacherQualification.deleteMany({ where: { teacherId: teacher.id } });
+      await prisma!.teacher.delete({ where: { id: teacher.id } });
+      await prisma!.user.delete({ where: { id: user.id } });
+      await prisma!.subject.delete({ where: { id: subject.id } });
     });
   });
 
   describeWithDb('Teacher -> TimeSlot relationship', () => {
     it('should allow querying teacher with time slots', async () => {
       const email = uniqueEmail('teacher-ts');
-      const user = await prisma.user.create({
+      const user = await prisma!.user.create({
         data: {
           email,
           passwordHash: 'test-hash',
@@ -166,18 +166,18 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const room = await prisma.room.create({
+      const room = await prisma!.room.create({
         data: { name: `Test Room ${Date.now()}`, capacity: 30 },
       });
 
-      const subject = await prisma.subject.create({
+      const subject = await prisma!.subject.create({
         data: {
           name: 'Test Subject TS',
           code: `TS-${Date.now()}`,
         },
       });
 
-      const classRoom = await prisma.class.create({
+      const classRoom = await prisma!.class.create({
         data: {
           name: `Test Class ${Date.now()}`,
           gradeLevel: 10,
@@ -185,14 +185,14 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const teacher = await prisma.teacher.create({
+      const teacher = await prisma!.teacher.create({
         data: {
           userId: user.id,
           name: 'Test Teacher TS',
         },
       });
 
-      const timeSlot = await prisma.timeSlot.create({
+      const timeSlot = await prisma!.timeSlot.create({
         data: {
           dayOfWeek: 1,
           startTime: '08:00',
@@ -204,7 +204,7 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const result = await prisma.teacher.findUnique({
+      const result = await prisma!.teacher.findUnique({
         where: { id: teacher.id },
         include: { timeSlots: true },
       });
@@ -214,19 +214,19 @@ describe('Prisma Schema', () => {
       expect(result!.timeSlots[0].dayOfWeek).toBe(1);
 
       // Cleanup
-      await prisma.timeSlot.delete({ where: { id: timeSlot.id } });
-      await prisma.teacher.delete({ where: { id: teacher.id } });
-      await prisma.class.delete({ where: { id: classRoom.id } });
-      await prisma.subject.delete({ where: { id: subject.id } });
-      await prisma.room.delete({ where: { id: room.id } });
-      await prisma.user.delete({ where: { id: user.id } });
+      await prisma!.timeSlot.delete({ where: { id: timeSlot.id } });
+      await prisma!.teacher.delete({ where: { id: teacher.id } });
+      await prisma!.class.delete({ where: { id: classRoom.id } });
+      await prisma!.subject.delete({ where: { id: subject.id } });
+      await prisma!.room.delete({ where: { id: room.id } });
+      await prisma!.user.delete({ where: { id: user.id } });
     });
   });
 
   describeWithDb('Teacher -> TeacherAbsence relationship', () => {
     it('should allow querying teacher with absences', async () => {
       const email = uniqueEmail('teacher-abs');
-      const user = await prisma.user.create({
+      const user = await prisma!.user.create({
         data: {
           email,
           passwordHash: 'test-hash',
@@ -234,14 +234,14 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const teacher = await prisma.teacher.create({
+      const teacher = await prisma!.teacher.create({
         data: {
           userId: user.id,
           name: 'Test Teacher Abs',
         },
       });
 
-      const absence = await prisma.teacherAbsence.create({
+      const absence = await prisma!.teacherAbsence.create({
         data: {
           teacherId: teacher.id,
           date: new Date('2026-02-01'),
@@ -250,7 +250,7 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const result = await prisma.teacher.findUnique({
+      const result = await prisma!.teacher.findUnique({
         where: { id: teacher.id },
         include: { absences: true },
       });
@@ -260,30 +260,30 @@ describe('Prisma Schema', () => {
       expect(result!.absences[0].reason).toBe('Sick leave');
 
       // Cleanup
-      await prisma.teacherAbsence.delete({ where: { id: absence.id } });
-      await prisma.teacher.delete({ where: { id: teacher.id } });
-      await prisma.user.delete({ where: { id: user.id } });
+      await prisma!.teacherAbsence.delete({ where: { id: absence.id } });
+      await prisma!.teacher.delete({ where: { id: teacher.id } });
+      await prisma!.user.delete({ where: { id: user.id } });
     });
 
     it('should support substitute teacher relationship', async () => {
       const email1 = uniqueEmail('teacher-sub1');
       const email2 = uniqueEmail('teacher-sub2');
 
-      const user1 = await prisma.user.create({
+      const user1 = await prisma!.user.create({
         data: { email: email1, passwordHash: 'test-hash', role: UserRole.TEACHER },
       });
-      const user2 = await prisma.user.create({
+      const user2 = await prisma!.user.create({
         data: { email: email2, passwordHash: 'test-hash', role: UserRole.TEACHER },
       });
 
-      const teacher1 = await prisma.teacher.create({
+      const teacher1 = await prisma!.teacher.create({
         data: { userId: user1.id, name: 'Original Teacher' },
       });
-      const teacher2 = await prisma.teacher.create({
+      const teacher2 = await prisma!.teacher.create({
         data: { userId: user2.id, name: 'Substitute Teacher' },
       });
 
-      const absence = await prisma.teacherAbsence.create({
+      const absence = await prisma!.teacherAbsence.create({
         data: {
           teacherId: teacher1.id,
           date: new Date('2026-02-01'),
@@ -292,7 +292,7 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const result = await prisma.teacherAbsence.findUnique({
+      const result = await prisma!.teacherAbsence.findUnique({
         where: { id: absence.id },
         include: { teacher: true, substituteTeacher: true },
       });
@@ -301,7 +301,7 @@ describe('Prisma Schema', () => {
       expect(result!.teacher.name).toBe('Original Teacher');
       expect(result!.substituteTeacher?.name).toBe('Substitute Teacher');
 
-      const substituteResult = await prisma.teacher.findUnique({
+      const substituteResult = await prisma!.teacher.findUnique({
         where: { id: teacher2.id },
         include: { substitutions: true },
       });
@@ -309,22 +309,22 @@ describe('Prisma Schema', () => {
       expect(substituteResult!.substitutions).toHaveLength(1);
 
       // Cleanup
-      await prisma.teacherAbsence.delete({ where: { id: absence.id } });
-      await prisma.teacher.deleteMany({ where: { id: { in: [teacher1.id, teacher2.id] } } });
-      await prisma.user.deleteMany({ where: { id: { in: [user1.id, user2.id] } } });
+      await prisma!.teacherAbsence.delete({ where: { id: absence.id } });
+      await prisma!.teacher.deleteMany({ where: { id: { in: [teacher1.id, teacher2.id] } } });
+      await prisma!.user.deleteMany({ where: { id: { in: [user1.id, user2.id] } } });
     });
   });
 
   describeWithDb('Subject -> Subject (prerequisites) self-relation', () => {
     it('should allow querying subject with prerequisites', async () => {
-      const basicSubject = await prisma.subject.create({
+      const basicSubject = await prisma!.subject.create({
         data: {
           name: 'Basic Math',
           code: `BASIC-${Date.now()}`,
         },
       });
 
-      const advancedSubject = await prisma.subject.create({
+      const advancedSubject = await prisma!.subject.create({
         data: {
           name: 'Advanced Math',
           code: `ADV-${Date.now()}`,
@@ -334,7 +334,7 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const result = await prisma.subject.findUnique({
+      const result = await prisma!.subject.findUnique({
         where: { id: advancedSubject.id },
         include: { prerequisites: true },
       });
@@ -343,7 +343,7 @@ describe('Prisma Schema', () => {
       expect(result!.prerequisites).toHaveLength(1);
       expect(result!.prerequisites[0].name).toBe('Basic Math');
 
-      const basicResult = await prisma.subject.findUnique({
+      const basicResult = await prisma!.subject.findUnique({
         where: { id: basicSubject.id },
         include: { prerequisiteOf: true },
       });
@@ -352,15 +352,15 @@ describe('Prisma Schema', () => {
       expect(basicResult!.prerequisiteOf[0].name).toBe('Advanced Math');
 
       // Cleanup
-      await prisma.subject.delete({ where: { id: advancedSubject.id } });
-      await prisma.subject.delete({ where: { id: basicSubject.id } });
+      await prisma!.subject.delete({ where: { id: advancedSubject.id } });
+      await prisma!.subject.delete({ where: { id: basicSubject.id } });
     });
   });
 
   describeWithDb('Student -> Enrollment -> Subject relationship', () => {
     it('should allow querying student with enrollments and subjects', async () => {
       const email = uniqueEmail('student-enroll');
-      const user = await prisma.user.create({
+      const user = await prisma!.user.create({
         data: {
           email,
           passwordHash: 'test-hash',
@@ -368,14 +368,14 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const subject1 = await prisma.subject.create({
+      const subject1 = await prisma!.subject.create({
         data: { name: 'Subject 1', code: `S1-${Date.now()}` },
       });
-      const subject2 = await prisma.subject.create({
+      const subject2 = await prisma!.subject.create({
         data: { name: 'Subject 2', code: `S2-${Date.now()}` },
       });
 
-      const student = await prisma.student.create({
+      const student = await prisma!.student.create({
         data: {
           userId: user.id,
           name: 'Test Student',
@@ -386,7 +386,7 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const result = await prisma.student.findUnique({
+      const result = await prisma!.student.findUnique({
         where: { id: student.id },
         include: {
           enrollments: {
@@ -404,7 +404,7 @@ describe('Prisma Schema', () => {
 
       // Test unique constraint
       await expect(
-        prisma.enrollment.create({
+        prisma!.enrollment.create({
           data: {
             studentId: student.id,
             subjectId: subject1.id,
@@ -413,16 +413,16 @@ describe('Prisma Schema', () => {
       ).rejects.toThrow();
 
       // Cleanup
-      await prisma.enrollment.deleteMany({ where: { studentId: student.id } });
-      await prisma.student.delete({ where: { id: student.id } });
-      await prisma.subject.deleteMany({ where: { id: { in: [subject1.id, subject2.id] } } });
-      await prisma.user.delete({ where: { id: user.id } });
+      await prisma!.enrollment.deleteMany({ where: { studentId: student.id } });
+      await prisma!.student.delete({ where: { id: student.id } });
+      await prisma!.subject.deleteMany({ where: { id: { in: [subject1.id, subject2.id] } } });
+      await prisma!.user.delete({ where: { id: user.id } });
     });
   });
 
   describeWithDb('Class -> Room relationship', () => {
     it('should allow querying class with room', async () => {
-      const room = await prisma.room.create({
+      const room = await prisma!.room.create({
         data: {
           name: `Test Room CR ${Date.now()}`,
           capacity: 30,
@@ -430,7 +430,7 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const classRoom = await prisma.class.create({
+      const classRoom = await prisma!.class.create({
         data: {
           name: `Test Class CR ${Date.now()}`,
           gradeLevel: 10,
@@ -439,7 +439,7 @@ describe('Prisma Schema', () => {
         },
       });
 
-      const result = await prisma.class.findUnique({
+      const result = await prisma!.class.findUnique({
         where: { id: classRoom.id },
         include: { room: true },
       });
@@ -448,7 +448,7 @@ describe('Prisma Schema', () => {
       expect(result!.room).not.toBeNull();
       expect(result!.room!.name).toContain('Test Room CR');
 
-      const roomResult = await prisma.room.findUnique({
+      const roomResult = await prisma!.room.findUnique({
         where: { id: room.id },
         include: { classes: true },
       });
@@ -456,8 +456,8 @@ describe('Prisma Schema', () => {
       expect(roomResult!.classes).toHaveLength(1);
 
       // Cleanup
-      await prisma.class.delete({ where: { id: classRoom.id } });
-      await prisma.room.delete({ where: { id: room.id } });
+      await prisma!.class.delete({ where: { id: classRoom.id } });
+      await prisma!.room.delete({ where: { id: room.id } });
     });
   });
 });
