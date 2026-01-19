@@ -17,7 +17,16 @@
     "typecheck": "pnpm -r typecheck",
     "test": "jest",
     "test:ci": "jest --ci --coverage --runInBand",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "docker:up": "docker compose -f docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f docker/docker-compose.yml down",
+    "docker:logs": "docker compose -f docker/docker-compose.yml logs -f",
+    "docker:build": "docker compose -f docker/docker-compose.yml build",
+    "docker:rebuild": "docker compose -f docker/docker-compose.yml build --no-cache",
+    "db:migrate": "pnpm --filter backend prisma migrate dev",
+    "db:seed": "pnpm --filter backend prisma db seed",
+    "db:studio": "pnpm --filter backend prisma studio",
+    "db:generate": "pnpm --filter backend prisma generate"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

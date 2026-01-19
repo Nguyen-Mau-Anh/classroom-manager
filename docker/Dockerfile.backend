@@ -1,0 +1,57 @@
+# Build stage
+FROM node:20-alpine AS builder
+
+# Enable corepack for pnpm
+RUN corepack enable && corepack prepare pnpm@8 --activate
+
+WORKDIR /app
+
+# Copy workspace files
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/backend/package.json ./packages/backend/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY packages/shared ./packages/shared
+COPY packages/backend ./packages/backend
+
+# Generate Prisma client (if schema exists)
+RUN pnpm --filter backend prisma generate || echo "Prisma generate skipped"
+
+# Build shared first, then backend
+RUN pnpm --filter shared build
+RUN pnpm --filter backend build
+
+# Production stage
+FROM node:20-alpine
+
+# Enable corepack for pnpm
+RUN corepack enable && corepack prepare pnpm@8 --activate
+
+WORKDIR /app
+
+# Copy built files from builder
+COPY --from=builder /app/packages/backend/dist ./dist
+COPY --from=builder /app/packages/backend/prisma ./prisma
+COPY --from=builder /app/packages/backend/package.json ./
+
+# Copy node_modules (includes Prisma client and dependencies)
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/backend/node_modules ./packages/backend/node_modules
+
+# Set default environment variables (can be overridden by docker-compose)
+ENV NODE_ENV=development
+ENV PORT=4000
+
+# Expose port
+EXPOSE 4000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/health || exit 1
+
+# Start the server (entry point exports all modules)
+CMD ["node", "dist/index.js"]

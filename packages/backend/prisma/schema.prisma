@@ -1,0 +1,18 @@
+// Prisma schema file
+// This is a placeholder schema for Docker builds
+// Full schema will be implemented in Story 0.3
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Placeholder model - will be replaced in Story 0.3
+model Placeholder {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+}
