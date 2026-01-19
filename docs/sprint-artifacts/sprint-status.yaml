@@ -42,8 +42,8 @@ story_location: docs/sprint-artifacts
 
 development_status:
   # Epic 0: Project Foundation & Infrastructure
-  epic-0: backlog
-  0-1-repository-structure-and-ci-pipeline: backlog
+  epic-0: in-progress
+  0-1-repository-structure-and-ci-pipeline: done
   0-2-docker-development-environment: backlog
   0-3-database-schema-and-prisma-setup: backlog
   0-4-authentication-system: backlog
