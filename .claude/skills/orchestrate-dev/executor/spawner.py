@@ -191,7 +191,7 @@ class ClaudeSpawner:
             return TaskResult(
                 success=False,
                 output="",
-                error=f"Task timed out after {self.timeout_seconds} seconds",
+                error=f"Task timed out after {actual_timeout} seconds",
                 exit_code=-1,
                 duration_seconds=duration,
             )
