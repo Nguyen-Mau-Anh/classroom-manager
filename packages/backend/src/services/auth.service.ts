@@ -1,15 +1,6 @@
 import { prisma } from '../lib/prisma';
-import {
-  storeRefreshToken,
-  validateRefreshToken,
-  deleteRefreshToken,
-} from '../lib/redis';
-import {
-  generateTokenPair,
-  verifyToken,
-  TokenPair,
-  JwtPayload,
-} from '../utils/jwt';
+import { storeRefreshToken, validateRefreshToken, deleteRefreshToken } from '../lib/redis';
+import { generateTokenPair, verifyToken, TokenPair, JwtPayload } from '../utils/jwt';
 import { comparePassword } from '../utils/password';
 
 export interface LoginResult {

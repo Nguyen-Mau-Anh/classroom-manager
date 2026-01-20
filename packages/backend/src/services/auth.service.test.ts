@@ -83,9 +83,7 @@ describe('AuthService', () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (passwordModule.comparePassword as jest.Mock).mockResolvedValue(false);
 
-      await expect(
-        authService.login('test@example.com', 'wrongpassword')
-      ).rejects.toMatchObject({
+      await expect(authService.login('test@example.com', 'wrongpassword')).rejects.toMatchObject({
         code: 'INVALID_CREDENTIALS',
         message: 'Invalid email or password',
       } as AuthError);
@@ -122,9 +120,7 @@ describe('AuthService', () => {
         throw new Error('Invalid token');
       });
 
-      await expect(
-        authService.refresh('invalid-token')
-      ).rejects.toMatchObject({
+      await expect(authService.refresh('invalid-token')).rejects.toMatchObject({
         code: 'INVALID_TOKEN',
         message: 'Invalid or expired refresh token',
       } as AuthError);
@@ -137,9 +133,7 @@ describe('AuthService', () => {
       });
       (redisModule.validateRefreshToken as jest.Mock).mockResolvedValue(false);
 
-      await expect(
-        authService.refresh('revoked-token')
-      ).rejects.toMatchObject({
+      await expect(authService.refresh('revoked-token')).rejects.toMatchObject({
         code: 'INVALID_TOKEN',
         message: 'Refresh token has been revoked',
       } as AuthError);
@@ -153,9 +147,7 @@ describe('AuthService', () => {
       (redisModule.validateRefreshToken as jest.Mock).mockResolvedValue(true);
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        authService.refresh('valid-token')
-      ).rejects.toMatchObject({
+      await expect(authService.refresh('valid-token')).rejects.toMatchObject({
         code: 'USER_NOT_FOUND',
         message: 'User no longer exists',
       } as AuthError);

@@ -2,11 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 
 import { authService, AuthError } from '../services/auth.service';
 
-export function authenticate(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void {
+export function authenticate(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {

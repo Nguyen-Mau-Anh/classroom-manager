@@ -109,9 +109,7 @@ describe('Auth Routes Integration Tests', () => {
     });
 
     it('should return 400 if email is missing', async () => {
-      const response = await request(app)
-        .post('/api/auth/login')
-        .send({ password: 'password123' });
+      const response = await request(app).post('/api/auth/login').send({ password: 'password123' });
 
       expect(response.status).toBe(400);
       expect((response.body as ApiResponse).success).toBe(false);

@@ -38,10 +38,7 @@ process.on('SIGINT', shutdown);
 const REFRESH_TOKEN_PREFIX = 'refresh_token:';
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 
-export async function storeRefreshToken(
-  userId: string,
-  token: string
-): Promise<void> {
+export async function storeRefreshToken(userId: string, token: string): Promise<void> {
   const key = `${REFRESH_TOKEN_PREFIX}${userId}`;
   await redis.set(key, token, 'EX', REFRESH_TOKEN_TTL);
 }
@@ -56,10 +53,7 @@ export async function deleteRefreshToken(userId: string): Promise<void> {
   await redis.del(key);
 }
 
-export async function validateRefreshToken(
-  userId: string,
-  token: string
-): Promise<boolean> {
+export async function validateRefreshToken(userId: string, token: string): Promise<boolean> {
   const storedToken = await getRefreshToken(userId);
   return storedToken === token;
 }
