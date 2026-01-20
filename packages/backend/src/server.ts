@@ -1,6 +1,7 @@
 import express, { Application, json, Request, Response } from 'express';
 
 import { getHealthStatus } from './health';
+import authRoutes from './routes/auth.routes';
 
 const app: Application = express();
 const PORT = process.env.PORT ?? 4000;
@@ -14,6 +15,9 @@ app.get('/api/health', (_req: Request, res: Response) => {
   const health = getHealthStatus(startTime);
   res.json(health);
 });
+
+// Auth routes
+app.use('/api/auth', authRoutes);
 
 // Root endpoint
 app.get('/', (_req: Request, res: Response) => {
