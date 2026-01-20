@@ -16,10 +16,10 @@ class RetryConfig(BaseModel):
 
 class StageConfig(BaseModel):
     """Configuration for a single stage."""
-    order: int
+    order: int = 0  # Made optional with default
     enabled: bool = True
     execution: str = "spawn"  # "spawn" or "direct"
-    type: str  # "bmad_workflow" or "bash"
+    type: str = "bmad_workflow"  # "bmad_workflow" or "bash"
     workflow: Optional[str] = None
     command: Optional[str] = None
     condition: Optional[str] = None

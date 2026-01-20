@@ -147,14 +147,20 @@ class ClaudeSpawner:
         kwargs["autonomy"] = AUTONOMY_INSTRUCTIONS
         return template.format(**kwargs).strip()
 
-    def spawn(self, task_type: TaskType, **kwargs) -> TaskResult:
+    def spawn(self, task_type: TaskType, timeout: Optional[int] = None, **kwargs) -> TaskResult:
         """
         Spawn a Claude CLI process synchronously.
 
         Uses subprocess.run with argument list for safety.
         Returns TaskResult with output and success status.
+
+        Args:
+            task_type: Type of task to execute
+            timeout: Override timeout in seconds (uses default if None)
+            **kwargs: Additional arguments for prompt template
         """
         prompt = self.build_prompt(task_type, **kwargs)
+        actual_timeout = timeout or self.timeout_seconds
 
         # Build command as list (safe - no shell injection)
         cmd = ["claude", "--print", "-p", prompt]
@@ -167,7 +173,7 @@ class ClaudeSpawner:
                 cwd=str(self.project_root),
                 capture_output=True,
                 text=True,
-                timeout=self.timeout_seconds,
+                timeout=actual_timeout,
             )
 
             duration = time.time() - start_time

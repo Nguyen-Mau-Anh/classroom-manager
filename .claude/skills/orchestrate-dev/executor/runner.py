@@ -132,22 +132,52 @@ class PipelineRunner:
 
         # Create new story
         console.print("  [dim]Spawning create-story workflow...[/dim]")
-        task_result = self.spawner.spawn(TaskType.CREATE_STORY)
+        stage_config = self.config.stages.get("create-story")
+        timeout = stage_config.timeout if stage_config else 300
+
+        task_result = self.spawner.spawn(TaskType.CREATE_STORY, timeout=timeout)
 
         if not task_result.success:
             console.print(f"  [red]Failed to create story: {task_result.error}[/red]")
             return None, None
 
-        # Parse story_id from output (simplified - would need better parsing)
-        # For now, assume output contains "story_id: X" or similar
-        output = task_result.output
         console.print(f"  [green]Story created ({task_result.duration_seconds:.1f}s)[/green]")
 
-        # Try to find the created story
-        # This is simplified - in practice would parse the output
+        # Parse story_id from output if not provided
+        output = task_result.output
+        if not story_id:
+            # Try to extract story_id from output
+            # Look for patterns like "story_id: X" or "Created: X.md"
+            import re
+            patterns = [
+                r'story[_-]?id[:\s]+([^\s\n]+)',
+                r'created[:\s]+([^\s\n]+)\.md',
+                r'(\d+-\d+-[\w-]+)\.md',
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, output, re.IGNORECASE)
+                if match:
+                    story_id = match.group(1).replace('.md', '')
+                    console.print(f"  [dim]Parsed story_id: {story_id}[/dim]")
+                    break
+
+        # Try to find the created story file
         if story_id:
             story_file = self.config_loader.find_story_file(story_id, self.config)
-            return story_id, story_file
+            if story_file:
+                return story_id, story_file
+
+        # If still no file found, search for recently created .md files
+        console.print(f"  [yellow]Could not locate story file, searching...[/yellow]")
+        for location in self.config.story_locations:
+            search_dir = self.project_root / Path(location).parent
+            if search_dir.exists():
+                md_files = sorted(search_dir.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True)
+                if md_files:
+                    story_file = md_files[0]
+                    story_id = story_file.stem
+                    console.print(f"  [dim]Found recent story: {story_id}[/dim]")
+                    return story_id, story_file
 
         return story_id, None
 
@@ -155,12 +185,14 @@ class PipelineRunner:
         """Run validation stage with retry."""
         stage_config = self.config.stages.get("validate")
         max_retries = stage_config.retry.max if stage_config and stage_config.retry else 2
+        timeout = stage_config.timeout if stage_config else 180
 
         for attempt in range(max_retries + 1):
             console.print(f"  [dim]Spawning validate workflow (attempt {attempt + 1})...[/dim]")
 
             task_result = self.spawner.spawn(
                 TaskType.VALIDATE_STORY,
+                timeout=timeout,
                 story_file=str(story_file)
             )
 
@@ -182,12 +214,14 @@ class PipelineRunner:
         """Run development stage with retry."""
         stage_config = self.config.stages.get("develop")
         max_retries = stage_config.retry.max if stage_config and stage_config.retry else 3
+        timeout = stage_config.timeout if stage_config else 900
 
         for attempt in range(max_retries + 1):
             console.print(f"  [dim]Spawning dev-story workflow (attempt {attempt + 1})...[/dim]")
 
             task_result = self.spawner.spawn(
                 TaskType.DEVELOP_STORY,
+                timeout=timeout,
                 story_id=story_id,
                 story_file=str(story_file)
             )
@@ -211,6 +245,7 @@ class PipelineRunner:
         stage_config = self.config.stages.get("lint")
         command = stage_config.command if stage_config else "npm run lint"
         max_retries = stage_config.retry.max if stage_config and stage_config.retry else 2
+        timeout = stage_config.timeout if stage_config else 120
 
         for attempt in range(max_retries + 1):
             console.print(f"  [dim]Running: {command} (attempt {attempt + 1})...[/dim]")
@@ -222,7 +257,7 @@ class PipelineRunner:
                     cwd=str(self.project_root),
                     capture_output=True,
                     text=True,
-                    timeout=120
+                    timeout=timeout
                 )
 
                 if proc.returncode == 0:
@@ -253,6 +288,7 @@ class PipelineRunner:
         stage_config = self.config.stages.get("typecheck")
         command = stage_config.command if stage_config else "npm run typecheck"
         max_retries = stage_config.retry.max if stage_config and stage_config.retry else 2
+        timeout = stage_config.timeout if stage_config else 180
 
         for attempt in range(max_retries + 1):
             console.print(f"  [dim]Running: {command} (attempt {attempt + 1})...[/dim]")
@@ -264,7 +300,7 @@ class PipelineRunner:
                     cwd=str(self.project_root),
                     capture_output=True,
                     text=True,
-                    timeout=180
+                    timeout=timeout
                 )
 
                 if proc.returncode == 0:
@@ -295,6 +331,7 @@ class PipelineRunner:
         stage_config = self.config.stages.get("unit-test")
         command = stage_config.command if stage_config else "npm test"
         max_retries = stage_config.retry.max if stage_config and stage_config.retry else 3
+        timeout = stage_config.timeout if stage_config else 300
 
         for attempt in range(max_retries + 1):
             console.print(f"  [dim]Running: {command} (attempt {attempt + 1})...[/dim]")
@@ -306,7 +343,7 @@ class PipelineRunner:
                     cwd=str(self.project_root),
                     capture_output=True,
                     text=True,
-                    timeout=300
+                    timeout=timeout
                 )
 
                 if proc.returncode == 0:
@@ -335,9 +372,12 @@ class PipelineRunner:
     def _run_code_review(self, story_id: str, result: PipelineResult) -> None:
         """Run code review stage (spawn, non-blocking)."""
         console.print(f"  [dim]Spawning code-review workflow...[/dim]")
+        stage_config = self.config.stages.get("code-review")
+        timeout = stage_config.timeout if stage_config else 300
 
         task_result = self.spawner.spawn(
             TaskType.CODE_REVIEW,
+            timeout=timeout,
             story_id=story_id,
             files_changed=", ".join(result.files_changed)
         )
