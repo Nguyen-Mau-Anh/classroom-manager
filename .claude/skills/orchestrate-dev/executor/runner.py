@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass, field
 
 from .config import ConfigLoader, DevConfig
@@ -27,8 +27,8 @@ class PipelineResult:
     success: bool
     story_id: Optional[str] = None
     story_file: Optional[str] = None
-    files_changed: list[str] = field(default_factory=list)
-    stage_results: dict[str, str] = field(default_factory=dict)
+    files_changed: List[str] = field(default_factory=list)
+    stage_results: Dict[str, str] = field(default_factory=dict)
     error: Optional[str] = None
 
 
@@ -173,7 +173,7 @@ class PipelineRunner:
 
         return result
 
-    def _resolve_story(self, story_id: Optional[str]) -> tuple[Optional[str], Optional[Path]]:
+    def _resolve_story(self, story_id: Optional[str]) -> Tuple[Optional[str], Optional[Path]]:
         """Resolve or create story file."""
         if story_id:
             story_file = self.config_loader.find_story_file(story_id, self.config)

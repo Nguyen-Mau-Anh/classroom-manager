@@ -8,7 +8,7 @@ import time
 import threading
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict, List, Union
 from enum import Enum
 
 
@@ -110,7 +110,7 @@ class ClaudeSpawner:
         self.timeout_seconds = timeout_seconds
         self.config = config
         self._task_counter = 0
-        self._active_tasks: dict[str, BackgroundTask] = {}
+        self._active_tasks: Dict[str, BackgroundTask] = {}
 
     def set_config(self, config: DevConfig) -> None:
         """Set the config after initialization."""
@@ -144,7 +144,7 @@ class ClaudeSpawner:
             }
             return prompt.format(**kwargs_with_defaults).strip()
 
-    def _build_command(self, prompt: str) -> list[str]:
+    def _build_command(self, prompt: str) -> List[str]:
         """Build the claude CLI command."""
         return [
             "claude",
@@ -412,7 +412,7 @@ class ClaudeSpawner:
         background: bool = False,
         on_complete: Optional[Callable[[TaskResult], None]] = None,
         **kwargs
-    ) -> TaskResult | BackgroundTask:
+    ) -> Union[TaskResult, BackgroundTask]:
         """
         Spawn Claude CLI for a specific stage.
 
@@ -588,14 +588,14 @@ class ClaudeSpawner:
         except (ProcessLookupError, PermissionError, OSError):
             pass
 
-    def get_active_tasks(self) -> dict[str, BackgroundTask]:
+    def get_active_tasks(self) -> Dict[str, BackgroundTask]:
         """Get all active (running) background tasks."""
         return {
             k: v for k, v in self._active_tasks.items()
             if v.is_running()
         }
 
-    def wait_all(self, poll_interval: float = 1.0) -> dict[str, TaskResult]:
+    def wait_all(self, poll_interval: float = 1.0) -> Dict[str, TaskResult]:
         """Wait for all background tasks to complete."""
         results = {}
         for task_id, task in self._active_tasks.items():

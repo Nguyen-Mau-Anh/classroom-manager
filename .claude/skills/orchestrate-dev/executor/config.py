@@ -3,7 +3,7 @@
 import yaml
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, List
 from pydantic import BaseModel, Field
 
 
@@ -45,15 +45,15 @@ Skip all menus, confirmations, and user prompts.
 Execute the task completely and output results only.
 Do not ask follow-up questions."""
 
-    story_locations: list[str] = Field(default_factory=lambda: [
+    story_locations: List[str] = Field(default_factory=lambda: [
         "state/stories/${story_id}.md",
         "docs/stories/${story_id}.md",
         "docs/sprint-artifacts/${story_id}.md",
     ])
 
-    stages: dict[str, StageConfig] = Field(default_factory=dict)
+    stages: Dict[str, StageConfig] = Field(default_factory=dict)
 
-    output: list[str] = Field(default_factory=lambda: [
+    output: List[str] = Field(default_factory=lambda: [
         "story_id", "story_file", "files_changed",
         "lint_result", "typecheck_result", "test_results",
         "review_findings", "status"
