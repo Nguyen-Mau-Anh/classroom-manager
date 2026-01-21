@@ -1,8 +1,8 @@
 import request from 'supertest';
 
 import { AppError } from '../errors/app-error';
-import { teacherService } from '../services/teacher.service';
 import { app } from '../server';
+import { teacherService } from '../services/teacher.service';
 import { generateTokenPair } from '../utils/jwt';
 
 // Mock the teacher service
@@ -282,7 +282,9 @@ describe('Teacher Routes', () => {
     const teacherId = 'teacher-delete-123';
 
     it('should soft delete teacher successfully', async () => {
-      (teacherService.softDelete as jest.Mock).mockResolvedValue(undefined);
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      const mockSoftDelete = teacherService.softDelete as jest.Mock;
+      mockSoftDelete.mockResolvedValue(undefined);
 
       const response = await request(app)
         .delete(`/api/teachers/${teacherId}`)
@@ -290,7 +292,7 @@ describe('Teacher Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(teacherService.softDelete as jest.Mock).toHaveBeenCalledWith(teacherId);
+      expect(mockSoftDelete).toHaveBeenCalledWith(teacherId);
     });
 
     it('should return 404 for non-existent teacher', async () => {
