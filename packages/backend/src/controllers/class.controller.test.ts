@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Request, Response } from 'express';
 
-import { classController } from './class.controller';
 import { classService } from '../services/class.service';
+
+import { classController } from './class.controller';
 
 // Mock the service
 jest.mock('../services/class.service');
@@ -47,7 +49,7 @@ describe('ClassController', () => {
 
       await classController.create(mockRequest as Request, mockResponse as Response);
 
-      expect(classService.create).toHaveBeenCalledWith(mockRequest.body);
+      expect(classService.create).toHaveBeenCalledWith(mockRequest.body); // eslint-disable-line @typescript-eslint/unbound-method
       expect(mockStatus).toHaveBeenCalledWith(201);
       expect(mockJson).toHaveBeenCalledWith({
         success: true,

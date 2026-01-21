@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Request, Response } from 'express';
 
-import { roomController } from './room.controller';
 import { roomService } from '../services/room.service';
+
+import { roomController } from './room.controller';
 
 // Mock the service
 jest.mock('../services/room.service');
