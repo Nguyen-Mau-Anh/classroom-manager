@@ -54,7 +54,7 @@ development_status:
   # Epic 1: Entity Management (Foundation)
   epic-1: in-progress
   1-1-teacher-management: review
-  1-2-student-management: backlog
+  1-2-student-management: in-progress
   1-3-class-and-room-management: backlog
   1-4-subject-management: backlog
   epic-1-retrospective: optional
