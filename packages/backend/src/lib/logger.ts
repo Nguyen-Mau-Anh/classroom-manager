@@ -1,17 +1,18 @@
 import pinoFactory, { Logger, Bindings } from 'pino';
 
 const isProduction = process.env.NODE_ENV === 'production';
+const isTest = process.env.NODE_ENV === 'test';
 const logLevel = process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug');
 
 /**
  * Configured Pino logger instance.
- * - Uses pino-pretty for development formatting
+ * - Uses pino-pretty for development formatting (disabled in test to prevent worker threads)
  * - Redacts sensitive fields like authorization headers and passwords
  * - Log level is configurable via LOG_LEVEL env var
  */
 export const logger = pinoFactory({
   level: logLevel,
-  transport: !isProduction
+  transport: !isProduction && !isTest
     ? {
         target: 'pino-pretty',
         options: {
