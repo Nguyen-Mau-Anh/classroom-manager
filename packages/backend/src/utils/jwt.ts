@@ -1,4 +1,4 @@
-import jwt, { SignOptions } from 'jsonwebtoken';
+import { sign, verify, decode, SignOptions } from 'jsonwebtoken';
 
 export interface JwtPayload {
   userId: string;
@@ -15,13 +15,13 @@ const ACCESS_TOKEN_EXPIRY = process.env.JWT_EXPIRES_IN ?? '24h';
 const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRES_IN ?? '7d';
 
 export function generateAccessToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, {
+  return sign(payload, JWT_SECRET, {
     expiresIn: ACCESS_TOKEN_EXPIRY,
   } as SignOptions);
 }
 
 export function generateRefreshToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, {
+  return sign(payload, JWT_SECRET, {
     expiresIn: REFRESH_TOKEN_EXPIRY,
   } as SignOptions);
 }
@@ -34,7 +34,7 @@ export function generateTokenPair(payload: JwtPayload): TokenPair {
 }
 
 export function verifyToken(token: string): JwtPayload {
-  const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload & {
+  const decoded = verify(token, JWT_SECRET) as JwtPayload & {
     iat: number;
     exp: number;
   };
@@ -46,7 +46,7 @@ export function verifyToken(token: string): JwtPayload {
 
 export function decodeToken(token: string): JwtPayload | null {
   try {
-    const decoded = jwt.decode(token) as JwtPayload | null;
+    const decoded = decode(token) as JwtPayload | null;
     return decoded;
   } catch {
     return null;

@@ -152,7 +152,7 @@ describe('Auth Routes Integration Tests', () => {
 
       expect(response.status).toBe(401);
       expect((response.body as ApiResponse).success).toBe(false);
-      expect((response.body as ApiResponse).error!.code).toBe('INVALID_TOKEN');
+      expect((response.body as ApiResponse).error!.code).toBe('UNAUTHORIZED');
     });
 
     it('should return 401 for revoked refresh token', async () => {

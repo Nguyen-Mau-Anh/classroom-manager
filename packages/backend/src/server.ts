@@ -1,34 +1,56 @@
+import cors from 'cors';
 import express, { Application, json, Request, Response } from 'express';
 
+import { corsConfig } from './config/cors';
 import { getHealthStatus } from './health';
+import { logger } from './lib/logger';
+import { errorHandler, notFoundHandler } from './middlewares/error-handler.middleware';
+import { requestIdMiddleware } from './middlewares/request-id.middleware';
+import { requestLogger } from './middlewares/request-logger.middleware';
 import authRoutes from './routes/auth.routes';
+import { success } from './utils/api-response';
 
 const app: Application = express();
 const PORT = process.env.PORT ?? 4000;
 const startTime = new Date();
 
-// Middleware
-app.use(json());
+// 1. CORS (must be first)
+app.use(cors(corsConfig));
 
-// Health check endpoint
+// 2. Request ID generation
+app.use(requestIdMiddleware);
+
+// 3. Request logging (pino-http)
+app.use(requestLogger);
+
+// 4. Body parsing
+app.use(json({ limit: '10kb' }));
+
+// Health check endpoint (uses new response format)
 app.get('/api/health', (_req: Request, res: Response) => {
   const health = getHealthStatus(startTime);
-  res.json(health);
+  success(res, health);
 });
 
 // Auth routes
 app.use('/api/auth', authRoutes);
 
-// Root endpoint
+// Root endpoint (uses new response format)
 app.get('/', (_req: Request, res: Response) => {
-  res.json({ message: 'Classroom Manager API', version: '0.1.0' });
+  success(res, { message: 'Classroom Manager API', version: '0.1.0' });
 });
+
+// 5. 404 handler (after all routes)
+app.use(notFoundHandler);
+
+// 6. Global error handler (must be last)
+app.use(errorHandler);
 
 // Start server only if this file is run directly
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Health check: http://localhost:${PORT}/api/health`);
+    logger.info(`Server running on port ${PORT}`);
+    logger.info(`Health check: http://localhost:${PORT}/api/health`);
   });
 }
 

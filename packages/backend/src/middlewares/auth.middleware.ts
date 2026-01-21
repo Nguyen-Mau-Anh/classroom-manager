@@ -1,31 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { AppError } from '../errors/app-error';
 import { authService, AuthError } from '../services/auth.service';
 
-export function authenticate(req: Request, res: Response, next: NextFunction): void {
+export function authenticate(req: Request, _res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
-    res.status(401).json({
-      success: false,
-      error: {
-        code: 'UNAUTHORIZED',
-        message: 'No authorization header provided',
-      },
-    });
-    return;
+    throw AppError.unauthorized('No authorization header provided');
   }
 
   const parts = authHeader.split(' ');
   if (parts.length !== 2 || parts[0] !== 'Bearer') {
-    res.status(401).json({
-      success: false,
-      error: {
-        code: 'UNAUTHORIZED',
-        message: 'Invalid authorization header format. Use: Bearer <token>',
-      },
-    });
-    return;
+    throw AppError.unauthorized('Invalid authorization header format. Use: Bearer <token>');
   }
 
   const token = parts[1];
@@ -36,38 +23,21 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
     next();
   } catch (error) {
     const authError = error as AuthError;
-    res.status(401).json({
-      success: false,
-      error: {
-        code: authError.code || 'UNAUTHORIZED',
-        message: authError.message || 'Invalid or expired token',
-      },
-    });
+    if (authError.code === 'TOKEN_EXPIRED') {
+      throw AppError.tokenExpired(authError.message);
+    }
+    throw AppError.unauthorized(authError.message || 'Invalid or expired token');
   }
 }
 
 export function authorize(...allowedRoles: string[]) {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
     if (!req.user) {
-      res.status(401).json({
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
-        },
-      });
-      return;
+      throw AppError.unauthorized('Authentication required');
     }
 
     if (!allowedRoles.includes(req.user.role)) {
-      res.status(403).json({
-        success: false,
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Insufficient permissions',
-        },
-      });
-      return;
+      throw AppError.forbidden('Insufficient permissions');
     }
 
     next();
