@@ -17,6 +17,9 @@ module.exports = {
       rootDir: '<rootDir>/packages/backend',
       testMatch: ['<rootDir>/src/**/*.test.ts'],
       transform: { '^.+\\.ts$': 'ts-jest' },
+      moduleNameMapper: {
+        '^uuid$': '<rootDir>/__mocks__/uuid.js',
+      },
       collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts'],
     },
     {
