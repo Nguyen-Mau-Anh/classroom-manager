@@ -48,7 +48,7 @@ stages:
     type: bmad_workflow
     workflow: /bmad:bmm:workflows:create-story
     condition: story_file_not_exists
-    timeout: 300
+    timeout: 3600
     on_failure: abort
     description: "Create story file from epics if it doesn't exist"
     prompt: |
@@ -65,7 +65,7 @@ stages:
     execution: spawn
     type: bmad_workflow
     workflow: /bmad:bmm:workflows:implementation-readiness
-    timeout: 180
+    timeout: 3600
     on_failure: fix_and_retry
     retry:
       max: 2
@@ -91,7 +91,7 @@ stages:
     execution: spawn
     type: bmad_workflow
     workflow: /bmad:bmm:workflows:dev-story
-    timeout: 900
+    timeout: 21600
     on_failure: fix_and_retry
     retry:
       max: 3
@@ -114,7 +114,7 @@ stages:
     enabled: true
     execution: spawn
     type: lint_check
-    timeout: 300
+    timeout: 3600
     on_failure: fix_and_retry
     retry:
       max: 3
@@ -195,7 +195,7 @@ stages:
     execution: direct
     type: bash
     command: "npm run typecheck"
-    timeout: 180
+    timeout: 3600
     on_failure: fix_and_retry
     retry:
       max: 2
@@ -236,7 +236,7 @@ stages:
     execution: direct
     type: bash
     command: "npm test"
-    timeout: 300
+    timeout: 3600
     on_failure: fix_and_retry
     retry:
       max: 3
@@ -276,7 +276,7 @@ stages:
     execution: spawn
     type: bmad_workflow
     workflow: /bmad:bmm:workflows:code-review
-    timeout: 300
+    timeout: 3600
     on_failure: continue
     blocking: false
     description: "Review code quality, security, and architecture"
