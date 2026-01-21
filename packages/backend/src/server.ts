@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from './middlewares/error-handler.middl
 import { requestIdMiddleware } from './middlewares/request-id.middleware';
 import { requestLogger } from './middlewares/request-logger.middleware';
 import authRoutes from './routes/auth.routes';
+import teacherRoutes from './routes/teacher.routes';
 import { success } from './utils/api-response';
 
 const app: Application = express();
@@ -34,6 +35,9 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 // Auth routes
 app.use('/api/auth', authRoutes);
+
+// Teacher routes
+app.use('/api/teachers', teacherRoutes);
 
 // Root endpoint (uses new response format)
 app.get('/', (_req: Request, res: Response) => {
