@@ -5,18 +5,8 @@ import time
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
-from enum import Enum
 
-
-class TaskType(str, Enum):
-    """Types of tasks for Layer 1."""
-    CREATE_STORY = "create_story"
-    VALIDATE_STORY = "validate_story"
-    DEVELOP_STORY = "develop_story"
-    CODE_REVIEW = "code_review"
-    FIX_LINT = "fix_lint"
-    FIX_TYPECHECK = "fix_typecheck"
-    FIX_TESTS = "fix_tests"
+from .config import DevConfig, StageConfig
 
 
 @dataclass
@@ -29,141 +19,92 @@ class TaskResult:
     duration_seconds: float = 0.0
 
 
-# Autonomy instructions to prevent interactive prompts
-AUTONOMY_INSTRUCTIONS = """
-AUTONOMOUS MODE - NO QUESTIONS.
-Skip all menus, confirmations, and user prompts.
-Execute the task completely and output results only.
-Do not ask follow-up questions.
-"""
-
-# Task-specific prompt templates
-TASK_PROMPTS = {
-    TaskType.CREATE_STORY: """
-/bmad:bmm:workflows:create-story
-{autonomy}
-Create the next story from the epics/backlog.
-Read the epics file and generate the story file.
-Output: story_id and story_file path.
-""",
-
-    TaskType.VALIDATE_STORY: """
-/bmad:bmm:workflows:implementation-readiness
-{autonomy}
-Validate story is ready for development.
-Story file: {story_file}
-
-Check:
-- Clear acceptance criteria
-- Well-defined tasks
-- Dependencies documented
-
-Output: PASS or FAIL with details.
-""",
-
-    TaskType.DEVELOP_STORY: """
-/bmad:bmm:workflows:dev-story
-{autonomy}
-Implement the story following tasks in the story file.
-Story file: {story_file}
-Story ID: {story_id}
-
-Follow red-green-refactor cycle for each task.
-Output: List of files changed and implementation summary.
-""",
-
-    TaskType.CODE_REVIEW: """
-/bmad:bmm:workflows:code-review
-{autonomy}
-Review the implemented code for story {story_id}.
-Files changed: {files_changed}
-
-Review for:
-- Code quality
-- Security issues
-- Performance
-- Architecture compliance
-
-Output: Findings with severity levels.
-""",
-
-    TaskType.FIX_LINT: """
-/bmad:bmm:agents:dev
-{autonomy}
-Fix the following lint errors:
-
-{errors}
-
-Apply fixes and ensure code passes linting.
-Output: Summary of fixes applied.
-""",
-
-    TaskType.FIX_TYPECHECK: """
-/bmad:bmm:agents:dev
-{autonomy}
-Fix the following TypeScript type errors:
-
-{errors}
-
-Apply fixes and ensure code passes type checking.
-Output: Summary of fixes applied.
-""",
-
-    TaskType.FIX_TESTS: """
-/bmad:bmm:agents:dev
-{autonomy}
-Fix the following failing tests:
-
-{errors}
-
-Fix either the tests or the implementation as appropriate.
-Output: Summary of fixes applied.
-""",
-}
-
-
 class ClaudeSpawner:
     """
     Spawn Claude CLI processes for isolated task execution.
 
     Each spawn creates a new Claude process via `claude --print`,
     ensuring full context isolation from the parent.
+
+    Prompts are loaded from config file (docs/orchestrate-dev.config.yaml)
+    making them easy to customize per project.
     """
 
     def __init__(
         self,
         project_root: Path,
         timeout_seconds: int = 600,
+        config: Optional[DevConfig] = None,
     ):
         self.project_root = Path(project_root)
         self.timeout_seconds = timeout_seconds
+        self.config = config
 
-    def build_prompt(self, task_type: TaskType, **kwargs) -> str:
-        """Build the prompt for a task with autonomy instructions."""
-        template = TASK_PROMPTS.get(task_type)
-        if not template:
-            raise ValueError(f"Unknown task type: {task_type}")
+    def set_config(self, config: DevConfig) -> None:
+        """Set the config after initialization."""
+        self.config = config
 
-        kwargs["autonomy"] = AUTONOMY_INSTRUCTIONS
-        return template.format(**kwargs).strip()
-
-    def spawn(self, task_type: TaskType, timeout: Optional[int] = None, **kwargs) -> TaskResult:
+    def build_prompt_from_config(
+        self,
+        stage_name: str,
+        **kwargs
+    ) -> Optional[str]:
         """
-        Spawn a Claude CLI process synchronously.
-
-        Uses subprocess.run with argument list for safety.
-        Returns TaskResult with output and success status.
+        Build prompt from config stage definition.
 
         Args:
-            task_type: Type of task to execute
-            timeout: Override timeout in seconds (uses default if None)
-            **kwargs: Additional arguments for prompt template
+            stage_name: Name of the stage (e.g., 'create-story', 'validate')
+            **kwargs: Variables to substitute in the prompt template
+                      (story_id, story_file, errors, files_changed)
+
+        Returns:
+            Formatted prompt string or None if stage not found
         """
-        prompt = self.build_prompt(task_type, **kwargs)
+        if not self.config:
+            raise ValueError("Config not set. Call set_config() first.")
+
+        stage = self.config.stages.get(stage_name)
+        if not stage or not stage.prompt:
+            return None
+
+        # Inject autonomy instructions
+        kwargs["autonomy"] = self.config.autonomy_instructions
+
+        # Format the prompt template
+        try:
+            return stage.prompt.format(**kwargs).strip()
+        except KeyError as e:
+            # If a variable is missing, leave it as placeholder
+            prompt = stage.prompt
+            kwargs_with_defaults = {
+                "autonomy": self.config.autonomy_instructions,
+                "story_id": kwargs.get("story_id", "{story_id}"),
+                "story_file": kwargs.get("story_file", "{story_file}"),
+                "errors": kwargs.get("errors", "{errors}"),
+                "files_changed": kwargs.get("files_changed", "{files_changed}"),
+            }
+            return prompt.format(**kwargs_with_defaults).strip()
+
+    def spawn_with_prompt(
+        self,
+        prompt: str,
+        timeout: Optional[int] = None,
+    ) -> TaskResult:
+        """
+        Spawn Claude CLI with a pre-built prompt.
+
+        Args:
+            prompt: The complete prompt to send
+            timeout: Override timeout in seconds
+
+        Returns:
+            TaskResult with output and success status
+        """
         actual_timeout = timeout or self.timeout_seconds
 
         # Build command as list (safe - no shell injection)
-        cmd = ["claude", "--print", "-p", prompt]
+        # Use --permission-mode bypassPermissions for automated execution
+        cmd = ["claude", "--print", "--permission-mode", "bypassPermissions", "-p", prompt]
 
         start_time = time.time()
 
@@ -205,3 +146,39 @@ class ClaudeSpawner:
                 exit_code=-1,
                 duration_seconds=duration,
             )
+
+    def spawn_stage(
+        self,
+        stage_name: str,
+        timeout: Optional[int] = None,
+        **kwargs
+    ) -> TaskResult:
+        """
+        Spawn Claude CLI for a specific stage using config prompts.
+
+        Args:
+            stage_name: Name of the stage (e.g., 'create-story', 'develop')
+            timeout: Override timeout in seconds
+            **kwargs: Variables for prompt template
+
+        Returns:
+            TaskResult with output and success status
+        """
+        prompt = self.build_prompt_from_config(stage_name, **kwargs)
+
+        if not prompt:
+            return TaskResult(
+                success=False,
+                output="",
+                error=f"No prompt found for stage: {stage_name}",
+                exit_code=-1,
+                duration_seconds=0.0,
+            )
+
+        # Get timeout from stage config if not overridden
+        if timeout is None and self.config:
+            stage = self.config.stages.get(stage_name)
+            if stage:
+                timeout = stage.timeout
+
+        return self.spawn_with_prompt(prompt, timeout)

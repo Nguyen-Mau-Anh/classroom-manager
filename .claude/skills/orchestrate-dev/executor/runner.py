@@ -9,7 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .config import ConfigLoader, DevConfig
-from .spawner import ClaudeSpawner, TaskType, TaskResult
+from .spawner import ClaudeSpawner, TaskResult
 
 
 console = Console()
@@ -58,6 +58,8 @@ class PipelineRunner:
             # Step 0: Load config
             console.print("\n[bold blue]Step 0: Loading configuration...[/bold blue]")
             self.config = self.config_loader.load()
+            # Pass config to spawner
+            self.spawner.set_config(self.config)
 
             # Step 1: Determine story
             console.print("\n[bold blue]Step 1: Determining story...[/bold blue]")
@@ -135,7 +137,7 @@ class PipelineRunner:
         stage_config = self.config.stages.get("create-story")
         timeout = stage_config.timeout if stage_config else 300
 
-        task_result = self.spawner.spawn(TaskType.CREATE_STORY, timeout=timeout)
+        task_result = self.spawner.spawn_stage("create-story")
 
         if not task_result.success:
             console.print(f"  [red]Failed to create story: {task_result.error}[/red]")
@@ -190,8 +192,8 @@ class PipelineRunner:
         for attempt in range(max_retries + 1):
             console.print(f"  [dim]Spawning validate workflow (attempt {attempt + 1})...[/dim]")
 
-            task_result = self.spawner.spawn(
-                TaskType.VALIDATE_STORY,
+            task_result = self.spawner.spawn_stage(
+                "validate",
                 timeout=timeout,
                 story_file=str(story_file)
             )
@@ -219,8 +221,8 @@ class PipelineRunner:
         for attempt in range(max_retries + 1):
             console.print(f"  [dim]Spawning dev-story workflow (attempt {attempt + 1})...[/dim]")
 
-            task_result = self.spawner.spawn(
-                TaskType.DEVELOP_STORY,
+            task_result = self.spawner.spawn_stage(
+                "develop",
                 timeout=timeout,
                 story_id=story_id,
                 story_file=str(story_file)
@@ -270,7 +272,7 @@ class PipelineRunner:
 
                 if attempt < max_retries:
                     console.print(f"  [dim]Spawning dev agent to fix lint errors...[/dim]")
-                    fix_result = self.spawner.spawn(TaskType.FIX_LINT, errors=errors)
+                    fix_result = self.spawner.spawn_stage("lint", errors=errors)
                     if not fix_result.success:
                         console.print(f"  [yellow]Fix attempt failed[/yellow]")
 
@@ -313,7 +315,7 @@ class PipelineRunner:
 
                 if attempt < max_retries:
                     console.print(f"  [dim]Spawning dev agent to fix type errors...[/dim]")
-                    fix_result = self.spawner.spawn(TaskType.FIX_TYPECHECK, errors=errors)
+                    fix_result = self.spawner.spawn_stage("typecheck", errors=errors)
                     if not fix_result.success:
                         console.print(f"  [yellow]Fix attempt failed[/yellow]")
 
@@ -356,7 +358,7 @@ class PipelineRunner:
 
                 if attempt < max_retries:
                     console.print(f"  [dim]Spawning dev agent to fix tests...[/dim]")
-                    fix_result = self.spawner.spawn(TaskType.FIX_TESTS, errors=errors)
+                    fix_result = self.spawner.spawn_stage("unit-test", errors=errors)
                     if not fix_result.success:
                         console.print(f"  [yellow]Fix attempt failed[/yellow]")
 
@@ -375,8 +377,8 @@ class PipelineRunner:
         stage_config = self.config.stages.get("code-review")
         timeout = stage_config.timeout if stage_config else 300
 
-        task_result = self.spawner.spawn(
-            TaskType.CODE_REVIEW,
+        task_result = self.spawner.spawn_stage(
+            "code-review",
             timeout=timeout,
             story_id=story_id,
             files_changed=", ".join(result.files_changed)
