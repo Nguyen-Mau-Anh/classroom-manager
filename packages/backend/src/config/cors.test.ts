@@ -113,14 +113,7 @@ describe('cors', () => {
     it('should have correct methods configured', () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
       const { corsConfig } = require('./cors') as CorsModule;
-      expect(corsConfig.methods).toEqual([
-        'GET',
-        'POST',
-        'PUT',
-        'PATCH',
-        'DELETE',
-        'OPTIONS',
-      ]);
+      expect(corsConfig.methods).toEqual(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
     });
 
     it('should have correct allowed headers', () => {

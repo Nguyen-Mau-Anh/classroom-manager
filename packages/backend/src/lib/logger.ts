@@ -22,13 +22,7 @@ export const logger = pinoFactory({
       }
     : undefined,
   redact: {
-    paths: [
-      'req.headers.authorization',
-      'password',
-      'passwordHash',
-      'refreshToken',
-      'accessToken',
-    ],
+    paths: ['req.headers.authorization', 'password', 'passwordHash', 'refreshToken', 'accessToken'],
     remove: true,
   },
   base: {

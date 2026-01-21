@@ -69,11 +69,7 @@ export function unauthorizedError(
 /**
  * Sends a forbidden error API response.
  */
-export function forbiddenError(
-  res: Response,
-  message = 'Forbidden',
-  requestId?: string
-): Response {
+export function forbiddenError(res: Response, message = 'Forbidden', requestId?: string): Response {
   return error(res, 'FORBIDDEN', message, 403, undefined, requestId);
 }
 

@@ -54,9 +54,9 @@ describe('validate.middleware', () => {
         mockReq.body = { email: 'invalid-email', password: 'short' };
         const middleware = validate({ body: bodySchema });
 
-        expect(() =>
-          middleware(mockReq as Request, mockRes as Response, mockNext)
-        ).toThrow(AppError);
+        expect(() => middleware(mockReq as Request, mockRes as Response, mockNext)).toThrow(
+          AppError
+        );
 
         try {
           middleware(mockReq as Request, mockRes as Response, mockNext);
@@ -147,9 +147,7 @@ describe('validate.middleware', () => {
         } catch (error) {
           expect(error).toBeInstanceOf(AppError);
           const appError = error as AppError;
-          expect(appError.details).toEqual([
-            expect.objectContaining({ field: 'params.id' }),
-          ]);
+          expect(appError.details).toEqual([expect.objectContaining({ field: 'params.id' })]);
         }
       });
     });

@@ -111,9 +111,7 @@ describe('Express Server', () => {
 
   describe('CORS', () => {
     it('should have CORS headers for allowed origins', async () => {
-      const response = await request(app)
-        .get('/')
-        .set('Origin', 'http://localhost:3000');
+      const response = await request(app).get('/').set('Origin', 'http://localhost:3000');
 
       expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
       expect(response.headers['access-control-allow-credentials']).toBe('true');
