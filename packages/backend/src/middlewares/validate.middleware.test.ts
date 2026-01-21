@@ -54,9 +54,7 @@ describe('validate.middleware', () => {
         mockReq.body = { email: 'invalid-email', password: 'short' };
         const middleware = validate({ body: bodySchema });
 
-        expect(() => middleware(mockReq, mockRes, mockNext)).toThrow(
-          AppError
-        );
+        expect(() => middleware(mockReq, mockRes, mockNext)).toThrow(AppError);
 
         try {
           middleware(mockReq, mockRes, mockNext);
