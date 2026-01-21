@@ -4,7 +4,7 @@ import { PrismaClient, UserRole, AbsenceStatus, TimeSlotStatus } from '@prisma/c
 const hasDatabase = !!process.env.DATABASE_URL;
 
 // Prisma client for integration tests (only when database available)
-let prisma: PrismaClient | null;
+let prisma: PrismaClient | undefined;
 
 if (hasDatabase) {
   prisma = new PrismaClient();
@@ -398,7 +398,7 @@ describe('Prisma Schema', () => {
       expect(result).not.toBeNull();
       expect(result!.enrollments).toHaveLength(2);
       expect(
-        result!.enrollments.map((e: { subject: { name: string } }) => e.subject.name).sort()
+        result!.enrollments.map((e: { subject: { name: string } }) => e.subject.name).sort(),
       ).toEqual(['Subject 1', 'Subject 2']);
 
       // Test unique constraint
@@ -408,7 +408,7 @@ describe('Prisma Schema', () => {
             studentId: student.id,
             subjectId: subject1.id,
           },
-        })
+        }),
       ).rejects.toThrow();
 
       // Cleanup

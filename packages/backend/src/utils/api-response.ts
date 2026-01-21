@@ -22,7 +22,7 @@ export function error(
   message: string,
   statusCode = 500,
   details?: ValidationDetail[],
-  requestId?: string
+  requestId?: string,
 ): Response {
   const response: ApiErrorResponse = {
     success: false,
@@ -43,7 +43,7 @@ export function validationError(
   res: Response,
   message: string,
   details: ValidationDetail[],
-  requestId?: string
+  requestId?: string,
 ): Response {
   return error(res, 'VALIDATION_ERROR', message, 400, details, requestId);
 }
@@ -61,7 +61,7 @@ export function notFoundError(res: Response, resource: string, requestId?: strin
 export function unauthorizedError(
   res: Response,
   message = 'Unauthorized',
-  requestId?: string
+  requestId?: string,
 ): Response {
   return error(res, 'UNAUTHORIZED', message, 401, undefined, requestId);
 }
@@ -79,7 +79,7 @@ export function forbiddenError(res: Response, message = 'Forbidden', requestId?:
 export function internalError(
   res: Response,
   message = 'Internal server error',
-  requestId?: string
+  requestId?: string,
 ): Response {
   return error(res, 'INTERNAL_ERROR', message, 500, undefined, requestId);
 }

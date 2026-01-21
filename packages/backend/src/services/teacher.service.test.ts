@@ -157,7 +157,7 @@ describe('TeacherService', () => {
               { user: { email: { contains: 'john', mode: 'insensitive' } } },
             ]),
           }),
-        })
+        }),
       );
     });
   });
@@ -285,7 +285,7 @@ describe('TeacherService', () => {
       prismaMock.teacher.findUnique.mockResolvedValue(null);
 
       await expect(teacherService.update('non-existent', { name: 'Updated' })).rejects.toThrow(
-        'Teacher not found'
+        'Teacher not found',
       );
     });
   });

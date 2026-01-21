@@ -393,7 +393,7 @@ Le Van C,duplicate@school.edu,12,12A`;
       expect(result.summary.valid).toBe(2); // First two rows valid (second is first occurrence of duplicate@...)
       expect(result.summary.invalid).toBe(1); // Row 3 has duplicate email
       expect(result.invalidRows.some((r) => r.errors.includes('Duplicate email in CSV'))).toBe(
-        true
+        true,
       );
     });
 

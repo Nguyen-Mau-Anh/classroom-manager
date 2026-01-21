@@ -65,7 +65,7 @@ describe('Teacher Routes', () => {
       (teacherService.create as jest.Mock).mockRejectedValue(
         AppError.validation('Email already in use', [
           { field: 'email', message: 'Email already in use' },
-        ])
+        ]),
       );
 
       const response = await request(app)
@@ -333,7 +333,7 @@ describe('Teacher Routes', () => {
 
     it('should return 404 for non-existent teacher', async () => {
       (teacherService.calculateWorkload as jest.Mock).mockRejectedValue(
-        AppError.notFound('Teacher')
+        AppError.notFound('Teacher'),
       );
 
       const response = await request(app)
