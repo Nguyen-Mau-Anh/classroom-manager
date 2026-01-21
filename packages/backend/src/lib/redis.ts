@@ -1,7 +1,7 @@
 import Redis from 'ioredis';
 
-const globalForRedis = globalThis as unknown as {
-  redis: Redis | undefined;
+const globalForRedis = globalThis as {
+  redis?: Redis;
 };
 
 function createRedisClient(): Redis {
@@ -43,7 +43,7 @@ export async function storeRefreshToken(userId: string, token: string): Promise<
   await redis.set(key, token, 'EX', REFRESH_TOKEN_TTL);
 }
 
-export async function getRefreshToken(userId: string): Promise<string | null> {
+export function getRefreshToken(userId: string): Promise<string | null> {
   const key = `${REFRESH_TOKEN_PREFIX}${userId}`;
   return redis.get(key);
 }

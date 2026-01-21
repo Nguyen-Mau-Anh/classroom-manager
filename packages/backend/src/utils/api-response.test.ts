@@ -12,7 +12,7 @@ import {
 } from './api-response';
 
 describe('api-response', () => {
-  let mockRes: Partial<Response>;
+  let mockRes: Response;
   let jsonMock: jest.Mock;
   let statusMock: jest.Mock;
 
@@ -22,13 +22,13 @@ describe('api-response', () => {
     mockRes = {
       status: statusMock,
       json: jsonMock,
-    };
+    } as unknown as Response;
   });
 
   describe('success', () => {
     it('should return success response with data and default 200 status', () => {
       const data = { id: 1, name: 'Test' };
-      success(mockRes as Response, data);
+      success(mockRes, data);
 
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(jsonMock).toHaveBeenCalledWith({
@@ -39,7 +39,7 @@ describe('api-response', () => {
 
     it('should return success response with custom status code', () => {
       const data = { id: 1 };
-      success(mockRes as Response, data, 201);
+      success(mockRes, data, 201);
 
       expect(statusMock).toHaveBeenCalledWith(201);
       expect(jsonMock).toHaveBeenCalledWith({
@@ -49,7 +49,7 @@ describe('api-response', () => {
     });
 
     it('should handle null data', () => {
-      success(mockRes as Response, null);
+      success(mockRes, null);
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: true,
@@ -59,7 +59,7 @@ describe('api-response', () => {
 
     it('should handle array data', () => {
       const data = [{ id: 1 }, { id: 2 }];
-      success(mockRes as Response, data);
+      success(mockRes, data);
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: true,
@@ -70,7 +70,7 @@ describe('api-response', () => {
 
   describe('error', () => {
     it('should return error response with code and message', () => {
-      error(mockRes as Response, 'TEST_ERROR', 'Test error message', 400);
+      error(mockRes, 'TEST_ERROR', 'Test error message', 400);
 
       expect(statusMock).toHaveBeenCalledWith(400);
       expect(jsonMock).toHaveBeenCalledWith({
@@ -84,7 +84,7 @@ describe('api-response', () => {
 
     it('should include details when provided', () => {
       const details = [{ field: 'email', message: 'Invalid email format' }];
-      error(mockRes as Response, 'VALIDATION_ERROR', 'Validation failed', 400, details);
+      error(mockRes, 'VALIDATION_ERROR', 'Validation failed', 400, details);
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: false,
@@ -97,7 +97,7 @@ describe('api-response', () => {
     });
 
     it('should include requestId when provided', () => {
-      error(mockRes as Response, 'TEST_ERROR', 'Test message', 500, undefined, 'req-123');
+      error(mockRes, 'TEST_ERROR', 'Test message', 500, undefined, 'req-123');
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: false,
@@ -110,7 +110,7 @@ describe('api-response', () => {
     });
 
     it('should not include empty details array', () => {
-      error(mockRes as Response, 'TEST_ERROR', 'Test message', 400, []);
+      error(mockRes, 'TEST_ERROR', 'Test message', 400, []);
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: false,
@@ -122,7 +122,7 @@ describe('api-response', () => {
     });
 
     it('should default to 500 status code', () => {
-      error(mockRes as Response, 'INTERNAL_ERROR', 'Server error');
+      error(mockRes, 'INTERNAL_ERROR', 'Server error');
 
       expect(statusMock).toHaveBeenCalledWith(500);
     });
@@ -134,7 +134,7 @@ describe('api-response', () => {
         { field: 'email', message: 'Invalid email' },
         { field: 'password', message: 'Password too short' },
       ];
-      validationError(mockRes as Response, 'Validation failed', details);
+      validationError(mockRes, 'Validation failed', details);
 
       expect(statusMock).toHaveBeenCalledWith(400);
       expect(jsonMock).toHaveBeenCalledWith({
@@ -149,7 +149,7 @@ describe('api-response', () => {
 
     it('should include requestId when provided', () => {
       const details = [{ field: 'email', message: 'Required' }];
-      validationError(mockRes as Response, 'Validation failed', details, 'req-456');
+      validationError(mockRes, 'Validation failed', details, 'req-456');
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: false,
@@ -165,7 +165,7 @@ describe('api-response', () => {
 
   describe('notFoundError', () => {
     it('should return not found error with resource name', () => {
-      notFoundError(mockRes as Response, 'User');
+      notFoundError(mockRes, 'User');
 
       expect(statusMock).toHaveBeenCalledWith(404);
       expect(jsonMock).toHaveBeenCalledWith({
@@ -178,7 +178,7 @@ describe('api-response', () => {
     });
 
     it('should include requestId when provided', () => {
-      notFoundError(mockRes as Response, 'User', 'req-789');
+      notFoundError(mockRes, 'User', 'req-789');
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: false,
@@ -193,7 +193,7 @@ describe('api-response', () => {
 
   describe('unauthorizedError', () => {
     it('should return unauthorized error with default message', () => {
-      unauthorizedError(mockRes as Response);
+      unauthorizedError(mockRes);
 
       expect(statusMock).toHaveBeenCalledWith(401);
       expect(jsonMock).toHaveBeenCalledWith({
@@ -206,7 +206,7 @@ describe('api-response', () => {
     });
 
     it('should return unauthorized error with custom message', () => {
-      unauthorizedError(mockRes as Response, 'Token expired');
+      unauthorizedError(mockRes, 'Token expired');
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: false,
@@ -220,7 +220,7 @@ describe('api-response', () => {
 
   describe('forbiddenError', () => {
     it('should return forbidden error with default message', () => {
-      forbiddenError(mockRes as Response);
+      forbiddenError(mockRes);
 
       expect(statusMock).toHaveBeenCalledWith(403);
       expect(jsonMock).toHaveBeenCalledWith({
@@ -233,7 +233,7 @@ describe('api-response', () => {
     });
 
     it('should return forbidden error with custom message', () => {
-      forbiddenError(mockRes as Response, 'Insufficient permissions');
+      forbiddenError(mockRes, 'Insufficient permissions');
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: false,
@@ -247,7 +247,7 @@ describe('api-response', () => {
 
   describe('internalError', () => {
     it('should return internal error with default message', () => {
-      internalError(mockRes as Response);
+      internalError(mockRes);
 
       expect(statusMock).toHaveBeenCalledWith(500);
       expect(jsonMock).toHaveBeenCalledWith({
@@ -260,7 +260,7 @@ describe('api-response', () => {
     });
 
     it('should return internal error with custom message', () => {
-      internalError(mockRes as Response, 'Database connection failed');
+      internalError(mockRes, 'Database connection failed');
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: false,

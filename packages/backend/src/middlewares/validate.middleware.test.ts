@@ -6,8 +6,8 @@ import { AppError } from '../errors/app-error';
 import { validate, validateBody, validateQuery, validateParams } from './validate.middleware';
 
 describe('validate.middleware', () => {
-  let mockReq: Partial<Request>;
-  let mockRes: Partial<Response>;
+  let mockReq: Request;
+  let mockRes: Response;
   let mockNext: jest.Mock;
 
   beforeEach(() => {
@@ -15,8 +15,8 @@ describe('validate.middleware', () => {
       body: {},
       query: {},
       params: {},
-    };
-    mockRes = {};
+    } as Request;
+    mockRes = {} as Response;
     mockNext = jest.fn();
   });
 
@@ -31,7 +31,7 @@ describe('validate.middleware', () => {
         mockReq.body = { email: 'test@example.com', password: 'password123' };
         const middleware = validate({ body: bodySchema });
 
-        middleware(mockReq as Request, mockRes as Response, mockNext);
+        middleware(mockReq, mockRes, mockNext);
 
         expect(mockNext).toHaveBeenCalledWith();
         expect(mockNext).toHaveBeenCalledTimes(1);
@@ -41,7 +41,7 @@ describe('validate.middleware', () => {
         mockReq.body = { email: 'test@example.com', password: 'password123', extra: 'ignored' };
         const middleware = validate({ body: bodySchema });
 
-        middleware(mockReq as Request, mockRes as Response, mockNext);
+        middleware(mockReq, mockRes, mockNext);
 
         // Non-strict schema strips extra fields
         expect(mockReq.body).toEqual({
@@ -54,12 +54,10 @@ describe('validate.middleware', () => {
         mockReq.body = { email: 'invalid-email', password: 'short' };
         const middleware = validate({ body: bodySchema });
 
-        expect(() => middleware(mockReq as Request, mockRes as Response, mockNext)).toThrow(
-          AppError
-        );
+        expect(() => middleware(mockReq, mockRes, mockNext)).toThrow(AppError);
 
         try {
-          middleware(mockReq as Request, mockRes as Response, mockNext);
+          middleware(mockReq, mockRes, mockNext);
         } catch (error) {
           expect(error).toBeInstanceOf(AppError);
           const appError = error as AppError;
@@ -79,7 +77,7 @@ describe('validate.middleware', () => {
         const middleware = validate({ body: bodySchema });
 
         try {
-          middleware(mockReq as Request, mockRes as Response, mockNext);
+          middleware(mockReq, mockRes, mockNext);
         } catch {
           // Expected
         }
@@ -98,7 +96,7 @@ describe('validate.middleware', () => {
         mockReq.query = { page: '1', limit: '10' } as unknown as Request['query'];
         const middleware = validate({ query: querySchema });
 
-        middleware(mockReq as Request, mockRes as Response, mockNext);
+        middleware(mockReq, mockRes, mockNext);
 
         expect(mockNext).toHaveBeenCalledWith();
         // Query should be transformed to numbers
@@ -110,7 +108,7 @@ describe('validate.middleware', () => {
         const middleware = validate({ query: querySchema });
 
         try {
-          middleware(mockReq as Request, mockRes as Response, mockNext);
+          middleware(mockReq, mockRes, mockNext);
         } catch (error) {
           expect(error).toBeInstanceOf(AppError);
           const appError = error as AppError;
@@ -133,7 +131,7 @@ describe('validate.middleware', () => {
         mockReq.params = { id: '550e8400-e29b-41d4-a716-446655440000' };
         const middleware = validate({ params: paramsSchema });
 
-        middleware(mockReq as Request, mockRes as Response, mockNext);
+        middleware(mockReq, mockRes, mockNext);
 
         expect(mockNext).toHaveBeenCalledWith();
       });
@@ -143,7 +141,7 @@ describe('validate.middleware', () => {
         const middleware = validate({ params: paramsSchema });
 
         try {
-          middleware(mockReq as Request, mockRes as Response, mockNext);
+          middleware(mockReq, mockRes, mockNext);
         } catch (error) {
           expect(error).toBeInstanceOf(AppError);
           const appError = error as AppError;
@@ -168,7 +166,7 @@ describe('validate.middleware', () => {
           params: paramsSchema,
         });
 
-        middleware(mockReq as Request, mockRes as Response, mockNext);
+        middleware(mockReq, mockRes, mockNext);
 
         expect(mockNext).toHaveBeenCalledWith();
         expect(mockReq.query).toEqual({ includeDeleted: true });
@@ -190,7 +188,7 @@ describe('validate.middleware', () => {
         });
 
         try {
-          middleware(mockReq as Request, mockRes as Response, mockNext);
+          middleware(mockReq, mockRes, mockNext);
         } catch (error) {
           expect(error).toBeInstanceOf(AppError);
           const appError = error as AppError;
@@ -203,7 +201,7 @@ describe('validate.middleware', () => {
       it('should pass when no schemas are provided', () => {
         const middleware = validate({});
 
-        middleware(mockReq as Request, mockRes as Response, mockNext);
+        middleware(mockReq, mockRes, mockNext);
 
         expect(mockNext).toHaveBeenCalledWith();
       });
@@ -216,7 +214,7 @@ describe('validate.middleware', () => {
       mockReq.body = { name: 'Test' };
 
       const middleware = validateBody(schema);
-      middleware(mockReq as Request, mockRes as Response, mockNext);
+      middleware(mockReq, mockRes, mockNext);
 
       expect(mockNext).toHaveBeenCalledWith();
     });
@@ -228,7 +226,7 @@ describe('validate.middleware', () => {
       mockReq.query = { search: 'test' } as unknown as Request['query'];
 
       const middleware = validateQuery(schema);
-      middleware(mockReq as Request, mockRes as Response, mockNext);
+      middleware(mockReq, mockRes, mockNext);
 
       expect(mockNext).toHaveBeenCalledWith();
     });
@@ -240,7 +238,7 @@ describe('validate.middleware', () => {
       mockReq.params = { id: '123' };
 
       const middleware = validateParams(schema);
-      middleware(mockReq as Request, mockRes as Response, mockNext);
+      middleware(mockReq, mockRes, mockNext);
 
       expect(mockNext).toHaveBeenCalledWith();
     });

@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 
 // Global declaration for prisma singleton in development
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+const globalForPrisma = globalThis as {
+  prisma?: PrismaClient;
 };
 
 // Create singleton instance

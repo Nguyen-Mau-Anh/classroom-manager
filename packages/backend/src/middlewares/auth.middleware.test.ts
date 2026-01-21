@@ -13,18 +13,18 @@ jest.mock('../services/auth.service', () => ({
 }));
 
 describe('Auth Middleware', () => {
-  let mockRequest: Partial<Request>;
-  let mockResponse: Partial<Response>;
+  let mockRequest: Request;
+  let mockResponse: Response;
   let nextFunction: NextFunction;
 
   beforeEach(() => {
     mockRequest = {
       headers: {},
-    };
+    } as Request;
     mockResponse = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn().mockReturnThis(),
-    };
+    } as unknown as Response;
     nextFunction = jest.fn();
     jest.clearAllMocks();
   });
@@ -32,11 +32,11 @@ describe('Auth Middleware', () => {
   describe('authenticate', () => {
     it('should throw AppError.unauthorized if no authorization header is provided', () => {
       expect(() => {
-        authenticate(mockRequest as Request, mockResponse as Response, nextFunction);
+        authenticate(mockRequest, mockResponse, nextFunction);
       }).toThrow(AppError);
 
       try {
-        authenticate(mockRequest as Request, mockResponse as Response, nextFunction);
+        authenticate(mockRequest, mockResponse, nextFunction);
       } catch (error) {
         expect(error).toBeInstanceOf(AppError);
         const appError = error as AppError;
@@ -52,11 +52,11 @@ describe('Auth Middleware', () => {
       mockRequest.headers = { authorization: 'Basic some-token' };
 
       expect(() => {
-        authenticate(mockRequest as Request, mockResponse as Response, nextFunction);
+        authenticate(mockRequest, mockResponse, nextFunction);
       }).toThrow(AppError);
 
       try {
-        authenticate(mockRequest as Request, mockResponse as Response, nextFunction);
+        authenticate(mockRequest, mockResponse, nextFunction);
       } catch (error) {
         expect(error).toBeInstanceOf(AppError);
         const appError = error as AppError;
@@ -77,7 +77,7 @@ describe('Auth Middleware', () => {
       });
 
       expect(() => {
-        authenticate(mockRequest as Request, mockResponse as Response, nextFunction);
+        authenticate(mockRequest, mockResponse, nextFunction);
       }).toThrow(AppError);
 
       expect(nextFunction).not.toHaveBeenCalled();
@@ -93,7 +93,7 @@ describe('Auth Middleware', () => {
       });
 
       try {
-        authenticate(mockRequest as Request, mockResponse as Response, nextFunction);
+        authenticate(mockRequest, mockResponse, nextFunction);
       } catch (error) {
         expect(error).toBeInstanceOf(AppError);
         const appError = error as AppError;
@@ -109,10 +109,11 @@ describe('Auth Middleware', () => {
       mockRequest.headers = { authorization: 'Bearer valid-token' };
       (authService.validateAccessToken as jest.Mock).mockReturnValue(userPayload);
 
-      authenticate(mockRequest as Request, mockResponse as Response, nextFunction);
+      authenticate(mockRequest, mockResponse, nextFunction);
 
       expect(mockRequest.user).toEqual(userPayload);
       expect(nextFunction).toHaveBeenCalled();
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(mockResponse.status).not.toHaveBeenCalled();
     });
   });
@@ -122,11 +123,11 @@ describe('Auth Middleware', () => {
       const middleware = authorize('ADMIN');
 
       expect(() => {
-        middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+        middleware(mockRequest, mockResponse, nextFunction);
       }).toThrow(AppError);
 
       try {
-        middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+        middleware(mockRequest, mockResponse, nextFunction);
       } catch (error) {
         expect(error).toBeInstanceOf(AppError);
         const appError = error as AppError;
@@ -142,11 +143,11 @@ describe('Auth Middleware', () => {
       const middleware = authorize('ADMIN');
 
       expect(() => {
-        middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+        middleware(mockRequest, mockResponse, nextFunction);
       }).toThrow(AppError);
 
       try {
-        middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+        middleware(mockRequest, mockResponse, nextFunction);
       } catch (error) {
         expect(error).toBeInstanceOf(AppError);
         const appError = error as AppError;
@@ -162,9 +163,10 @@ describe('Auth Middleware', () => {
       mockRequest.user = { userId: 'user-123', role: 'ADMIN' };
       const middleware = authorize('ADMIN', 'TEACHER');
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      middleware(mockRequest, mockResponse, nextFunction);
 
       expect(nextFunction).toHaveBeenCalled();
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(mockResponse.status).not.toHaveBeenCalled();
     });
 
@@ -172,7 +174,7 @@ describe('Auth Middleware', () => {
       mockRequest.user = { userId: 'user-123', role: 'TEACHER' };
       const middleware = authorize('ADMIN', 'TEACHER');
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      middleware(mockRequest, mockResponse, nextFunction);
 
       expect(nextFunction).toHaveBeenCalled();
     });

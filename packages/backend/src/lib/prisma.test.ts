@@ -4,7 +4,7 @@ import { PrismaClient, UserRole, AbsenceStatus, TimeSlotStatus } from '@prisma/c
 const hasDatabase = !!process.env.DATABASE_URL;
 
 // Prisma client for integration tests (only when database available)
-let prisma: PrismaClient | null = null;
+let prisma: PrismaClient | null;
 
 if (hasDatabase) {
   prisma = new PrismaClient();
