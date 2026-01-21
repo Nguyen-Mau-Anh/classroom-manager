@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 
 from .config import ConfigLoader, DevConfig, StageConfig
 from .spawner import ClaudeSpawner, TaskResult, BackgroundTask, TaskStatus
-from .module_loader import ModuleLoader
 
 
 def log(msg: str) -> None:
