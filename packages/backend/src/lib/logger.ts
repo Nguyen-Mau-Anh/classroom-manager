@@ -12,16 +12,17 @@ const logLevel = process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug');
  */
 export const logger = pinoFactory({
   level: logLevel,
-  transport: !isProduction && !isTest
-    ? {
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'SYS:standard',
-          ignore: 'pid,hostname',
-        },
-      }
-    : undefined,
+  transport:
+    !isProduction && !isTest
+      ? {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            translateTime: 'SYS:standard',
+            ignore: 'pid,hostname',
+          },
+        }
+      : undefined,
   redact: {
     paths: ['req.headers.authorization', 'password', 'passwordHash', 'refreshToken', 'accessToken'],
     remove: true,

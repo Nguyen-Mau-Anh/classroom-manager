@@ -62,7 +62,11 @@ describe('Teacher Routes', () => {
     });
 
     it('should return 400 for duplicate email', async () => {
-      (teacherService.create as jest.Mock).mockRejectedValue(AppError.validation('Email already in use', [{ field: 'email', message: 'Email already in use' }]));
+      (teacherService.create as jest.Mock).mockRejectedValue(
+        AppError.validation('Email already in use', [
+          { field: 'email', message: 'Email already in use' },
+        ])
+      );
 
       const response = await request(app)
         .post('/api/teachers')
@@ -328,7 +332,9 @@ describe('Teacher Routes', () => {
     });
 
     it('should return 404 for non-existent teacher', async () => {
-      (teacherService.calculateWorkload as jest.Mock).mockRejectedValue(AppError.notFound('Teacher'));
+      (teacherService.calculateWorkload as jest.Mock).mockRejectedValue(
+        AppError.notFound('Teacher')
+      );
 
       const response = await request(app)
         .get('/api/teachers/non-existent-id/workload')
