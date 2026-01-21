@@ -16,8 +16,8 @@ jest.mock('../lib/logger', () => ({
 }));
 
 describe('error-handler.middleware', () => {
-  let mockReq: Partial<Request>;
-  let mockRes: Partial<Response>;
+  let mockReq: Request;
+  let mockRes: Response;
   let mockNext: NextFunction;
   let jsonMock: jest.Mock;
   let statusMock: jest.Mock;
@@ -30,11 +30,11 @@ describe('error-handler.middleware', () => {
       id: 'test-request-id',
       path: '/api/test',
       method: 'GET',
-    };
+    } as Request;
     mockRes = {
       status: statusMock,
       json: jsonMock,
-    };
+    } as unknown as Response;
     mockNext = jest.fn();
   });
 
@@ -45,7 +45,7 @@ describe('error-handler.middleware', () => {
           { field: 'email', message: 'Invalid email' },
         ]);
 
-        errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(error, mockReq, mockRes, mockNext);
 
         expect(statusMock).toHaveBeenCalledWith(400);
         expect(jsonMock).toHaveBeenCalledWith({
@@ -62,7 +62,7 @@ describe('error-handler.middleware', () => {
       it('should handle AppError.notFound', () => {
         const error = AppError.notFound('User');
 
-        errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(error, mockReq, mockRes, mockNext);
 
         expect(statusMock).toHaveBeenCalledWith(404);
         expect(jsonMock).toHaveBeenCalledWith({
@@ -78,7 +78,7 @@ describe('error-handler.middleware', () => {
       it('should handle AppError.unauthorized', () => {
         const error = AppError.unauthorized('Token expired');
 
-        errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(error, mockReq, mockRes, mockNext);
 
         expect(statusMock).toHaveBeenCalledWith(401);
         expect(jsonMock).toHaveBeenCalledWith({
@@ -94,7 +94,7 @@ describe('error-handler.middleware', () => {
       it('should handle AppError.forbidden', () => {
         const error = AppError.forbidden('Admin only');
 
-        errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(error, mockReq, mockRes, mockNext);
 
         expect(statusMock).toHaveBeenCalledWith(403);
         expect(jsonMock).toHaveBeenCalledWith({
@@ -110,7 +110,7 @@ describe('error-handler.middleware', () => {
       it('should not include empty details in response', () => {
         const error = new AppError('TEST_ERROR', 'Test message', 400, []);
 
-        errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(error, mockReq, mockRes, mockNext);
 
         expect(jsonMock).toHaveBeenCalledWith({
           success: false,
@@ -138,7 +138,7 @@ describe('error-handler.middleware', () => {
         }
 
         expect(zodError).not.toBeNull();
-        errorHandler(zodError!, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(zodError!, mockReq, mockRes, mockNext);
 
         expect(statusMock).toHaveBeenCalledWith(400);
         expect(jsonMock).toHaveBeenCalledWith({
@@ -172,7 +172,7 @@ describe('error-handler.middleware', () => {
         }
 
         expect(zodError).not.toBeNull();
-        errorHandler(zodError!, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(zodError!, mockReq, mockRes, mockNext);
 
         expect(jsonMock).toHaveBeenCalledWith({
           success: false,
@@ -190,7 +190,7 @@ describe('error-handler.middleware', () => {
       it('should return generic 500 error for unknown errors', () => {
         const error = new Error('Something went wrong');
 
-        errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(error, mockReq, mockRes, mockNext);
 
         expect(statusMock).toHaveBeenCalledWith(500);
         expect(jsonMock).toHaveBeenCalledWith({
@@ -207,7 +207,7 @@ describe('error-handler.middleware', () => {
         const error = new Error('Database connection failed');
         error.stack = 'Error: Database connection failed\n    at Connection.connect...';
 
-        errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(error, mockReq, mockRes, mockNext);
 
         const calls = jsonMock.mock.calls as Array<[ApiErrorResponse]>;
         const response = calls[0][0];
@@ -221,7 +221,7 @@ describe('error-handler.middleware', () => {
         const error = new Error('Test');
         mockReq.id = 'custom-req-id';
 
-        errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(error, mockReq, mockRes, mockNext);
 
         expect(jsonMock).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -234,9 +234,9 @@ describe('error-handler.middleware', () => {
 
       it('should not include requestId when not available', () => {
         const error = new Error('Test');
-        mockReq.id = undefined;
+        delete (mockReq as { id?: string }).id;
 
-        errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(error, mockReq, mockRes, mockNext);
 
         const calls = jsonMock.mock.calls as Array<[ApiErrorResponse]>;
         const response = calls[0][0];
@@ -248,7 +248,7 @@ describe('error-handler.middleware', () => {
       it('should log 500 errors', () => {
         const error = new Error('Internal error');
 
-        errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+        errorHandler(error, mockReq, mockRes, mockNext);
 
         expect(statusMock).toHaveBeenCalledWith(500);
       });
@@ -263,7 +263,7 @@ describe('error-handler.middleware', () => {
         path: '/api/unknown',
       };
 
-      notFoundHandler(req as Request, mockRes as Response);
+      notFoundHandler(req as Request, mockRes);
 
       expect(statusMock).toHaveBeenCalledWith(404);
       expect(jsonMock).toHaveBeenCalledWith({
@@ -283,7 +283,7 @@ describe('error-handler.middleware', () => {
         path: '/api/missing',
       };
 
-      notFoundHandler(req as Request, mockRes as Response);
+      notFoundHandler(req as Request, mockRes);
 
       expect(jsonMock).toHaveBeenCalledWith({
         success: false,
@@ -301,7 +301,7 @@ describe('error-handler.middleware', () => {
       const mockFn = jest.fn().mockResolvedValue(undefined);
       const handler = asyncHandler(mockFn);
 
-      await Promise.resolve(handler(mockReq as Request, mockRes as Response, mockNext));
+      await Promise.resolve(handler(mockReq, mockRes, mockNext));
 
       expect(mockFn).toHaveBeenCalledWith(mockReq, mockRes, mockNext);
     });
@@ -311,7 +311,7 @@ describe('error-handler.middleware', () => {
       const mockFn = jest.fn().mockRejectedValue(error);
       const handler = asyncHandler(mockFn);
 
-      await Promise.resolve(handler(mockReq as Request, mockRes as Response, mockNext));
+      await Promise.resolve(handler(mockReq, mockRes, mockNext));
 
       expect(mockNext).toHaveBeenCalledWith(error);
     });
@@ -323,7 +323,7 @@ describe('error-handler.middleware', () => {
       });
       const handler = asyncHandler(mockFn);
 
-      await Promise.resolve(handler(mockReq as Request, mockRes as Response, mockNext));
+      await Promise.resolve(handler(mockReq, mockRes, mockNext));
 
       expect(mockNext).toHaveBeenCalledWith(error);
     });
@@ -333,7 +333,7 @@ describe('error-handler.middleware', () => {
       const mockFn = jest.fn().mockRejectedValue(error);
       const handler = asyncHandler(mockFn);
 
-      await Promise.resolve(handler(mockReq as Request, mockRes as Response, mockNext));
+      await Promise.resolve(handler(mockReq, mockRes, mockNext));
 
       expect(mockNext).toHaveBeenCalledWith(error);
     });
