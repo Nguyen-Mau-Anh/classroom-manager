@@ -12,7 +12,7 @@ export class AppError extends Error {
     code: string,
     message: string,
     statusCode: number = 500,
-    details?: ValidationDetail[]
+    details?: ValidationDetail[],
   ) {
     super(message);
     this.name = 'AppError';

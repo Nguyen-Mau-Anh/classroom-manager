@@ -228,7 +228,7 @@ describe('error-handler.middleware', () => {
             error: expect.objectContaining({
               requestId: 'custom-req-id',
             }) as Record<string, unknown>,
-          })
+          }),
         );
       });
 

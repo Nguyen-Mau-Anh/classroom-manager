@@ -12,13 +12,13 @@ router.post(
   '/login',
   asyncHandler(async (req, res) => {
     await authController.login(req, res);
-  })
+  }),
 );
 router.post(
   '/refresh',
   asyncHandler(async (req, res) => {
     await authController.refresh(req, res);
-  })
+  }),
 );
 
 // Protected routes
@@ -27,7 +27,7 @@ router.post(
   authenticate,
   asyncHandler(async (req, res) => {
     await authController.logout(req, res);
-  })
+  }),
 );
 router.get('/me', authenticate, (req, res) => {
   authController.me(req, res);

@@ -22,7 +22,7 @@ router.post(
   validate({ body: createTeacherSchema }),
   asyncHandler(async (req, res) => {
     await teacherController.create(req, res);
-  })
+  }),
 );
 
 // GET /api/teachers - List teachers
@@ -31,7 +31,7 @@ router.get(
   validate({ query: teacherListQuerySchema }),
   asyncHandler(async (req, res) => {
     await teacherController.list(req, res);
-  })
+  }),
 );
 
 // GET /api/teachers/:id - Get teacher by ID
@@ -40,7 +40,7 @@ router.get(
   validateParams(teacherIdSchema),
   asyncHandler(async (req, res) => {
     await teacherController.getById(req, res);
-  })
+  }),
 );
 
 // PUT /api/teachers/:id - Update teacher
@@ -49,7 +49,7 @@ router.put(
   validate({ params: teacherIdSchema, body: updateTeacherSchema }),
   asyncHandler(async (req, res) => {
     await teacherController.update(req, res);
-  })
+  }),
 );
 
 // DELETE /api/teachers/:id - Soft delete teacher
@@ -58,7 +58,7 @@ router.delete(
   validateParams(teacherIdSchema),
   asyncHandler(async (req, res) => {
     await teacherController.softDelete(req, res);
-  })
+  }),
 );
 
 // GET /api/teachers/:id/workload - Get teacher workload
@@ -67,7 +67,7 @@ router.get(
   validateParams(teacherIdSchema),
   asyncHandler(async (req, res) => {
     await teacherController.getWorkload(req, res);
-  })
+  }),
 );
 
 export default router;

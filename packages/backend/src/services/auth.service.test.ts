@@ -64,7 +64,7 @@ describe('AuthService', () => {
       expect(result.user.role).toBe(mockUser.role);
       expect(redisModule.storeRefreshToken).toHaveBeenCalledWith(
         mockUser.id,
-        mockTokens.refreshToken
+        mockTokens.refreshToken,
       );
     });
 
@@ -72,7 +72,7 @@ describe('AuthService', () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
 
       await expect(
-        authService.login('nonexistent@example.com', 'password123')
+        authService.login('nonexistent@example.com', 'password123'),
       ).rejects.toMatchObject({
         code: 'INVALID_CREDENTIALS',
         message: 'Invalid email or password',
@@ -111,7 +111,7 @@ describe('AuthService', () => {
       expect(result).toEqual(newTokens);
       expect(redisModule.storeRefreshToken).toHaveBeenCalledWith(
         mockUser.id,
-        newTokens.refreshToken
+        newTokens.refreshToken,
       );
     });
 

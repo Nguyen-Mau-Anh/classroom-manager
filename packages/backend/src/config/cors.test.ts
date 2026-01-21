@@ -59,7 +59,7 @@ describe('cors', () => {
         const { corsConfig } = require('./cors') as CorsModule;
         const originFn = corsConfig.origin as (
           origin: string | undefined,
-          callback: (err: Error | null, allow?: boolean) => void
+          callback: (err: Error | null, allow?: boolean) => void,
         ) => void;
 
         originFn(undefined, (err, allow) => {
@@ -76,7 +76,7 @@ describe('cors', () => {
         const { corsConfig } = require('./cors') as CorsModule;
         const originFn = corsConfig.origin as (
           origin: string | undefined,
-          callback: (err: Error | null, allow?: boolean) => void
+          callback: (err: Error | null, allow?: boolean) => void,
         ) => void;
 
         originFn('http://localhost:3000', (err, allow) => {
@@ -93,7 +93,7 @@ describe('cors', () => {
         const { corsConfig } = require('./cors') as CorsModule;
         const originFn = corsConfig.origin as (
           origin: string | undefined,
-          callback: (err: Error | null, allow?: boolean) => void
+          callback: (err: Error | null, allow?: boolean) => void,
         ) => void;
 
         originFn('https://evil.com', (err) => {

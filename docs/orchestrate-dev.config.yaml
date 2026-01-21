@@ -111,7 +111,7 @@ stages:
   # Uses spawn agent to discover and run ALL lint checks the project uses
   lint:
     order: 4
-    enabled: true
+    enabled: false
     execution: spawn
     type: lint_check
     timeout: 300

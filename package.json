@@ -16,6 +16,7 @@
     "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx,json}\"",
     "typecheck": "pnpm -r typecheck",
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "test:ci": "jest --ci --coverage --runInBand",
     "test:watch": "jest --watch",
     "docker:up": "docker compose -f docker/docker-compose.yml up -d",

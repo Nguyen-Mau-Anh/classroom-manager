@@ -110,7 +110,7 @@ describe('Student Routes', () => {
       (studentService.create as jest.Mock).mockRejectedValue(
         AppError.validation('Email already in use', [
           { field: 'email', message: 'This email is already registered' },
-        ])
+        ]),
       );
 
       const response = await request(app)
@@ -237,7 +237,7 @@ describe('Student Routes', () => {
 
     it('should return 404 for non-existent student', async () => {
       (studentService.getById as jest.Mock).mockRejectedValue(
-        AppError.notFound('Student not found')
+        AppError.notFound('Student not found'),
       );
 
       const response = await request(app)
@@ -325,7 +325,7 @@ describe('Student Routes', () => {
         .attach(
           'file',
           Buffer.from('name,email,gradeLevel\nTest,test@school.edu,10'),
-          'students.csv'
+          'students.csv',
         );
 
       expect(response.status).toBe(200);

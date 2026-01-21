@@ -39,7 +39,7 @@ router.post(
   upload.single('file'),
   asyncHandler(async (req, res) => {
     await studentController.importPreview(req, res);
-  })
+  }),
 );
 
 // POST /api/students/import/confirm - Confirm bulk import
@@ -48,7 +48,7 @@ router.post(
   validate({ body: importConfirmSchema }),
   asyncHandler(async (req, res) => {
     await studentController.importConfirm(req, res);
-  })
+  }),
 );
 
 // POST /api/students - Create student
@@ -57,7 +57,7 @@ router.post(
   validate({ body: createStudentSchema }),
   asyncHandler(async (req, res) => {
     await studentController.create(req, res);
-  })
+  }),
 );
 
 // GET /api/students - List students
@@ -66,7 +66,7 @@ router.get(
   validate({ query: studentListQuerySchema }),
   asyncHandler(async (req, res) => {
     await studentController.list(req, res);
-  })
+  }),
 );
 
 // GET /api/students/:id - Get student by ID
@@ -75,7 +75,7 @@ router.get(
   validateParams(studentIdSchema),
   asyncHandler(async (req, res) => {
     await studentController.getById(req, res);
-  })
+  }),
 );
 
 // PUT /api/students/:id - Update student
@@ -84,7 +84,7 @@ router.put(
   validate({ params: studentIdSchema, body: updateStudentSchema }),
   asyncHandler(async (req, res) => {
     await studentController.update(req, res);
-  })
+  }),
 );
 
 // DELETE /api/students/:id - Soft delete student
@@ -93,7 +93,7 @@ router.delete(
   validateParams(studentIdSchema),
   asyncHandler(async (req, res) => {
     await studentController.softDelete(req, res);
-  })
+  }),
 );
 
 export default router;

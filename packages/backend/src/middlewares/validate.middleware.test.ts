@@ -67,7 +67,7 @@ describe('validate.middleware', () => {
             expect.arrayContaining([
               expect.objectContaining({ field: 'email' }),
               expect.objectContaining({ field: 'password' }),
-            ])
+            ]),
           );
         }
       });
@@ -116,7 +116,7 @@ describe('validate.middleware', () => {
             expect.arrayContaining([
               expect.objectContaining({ field: 'query.page' }),
               expect.objectContaining({ field: 'query.limit' }),
-            ])
+            ]),
           );
         }
       });
