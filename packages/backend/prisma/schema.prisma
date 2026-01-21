@@ -78,6 +78,7 @@ model Student {
   updatedAt  DateTime @updatedAt
 
   enrollments Enrollment[]
+  waitlists   Waitlist[]
 }
 
 model Subject {
@@ -119,6 +120,7 @@ model Class {
 
   students  Student[]
   timeSlots TimeSlot[]
+  waitlists Waitlist[]
 }
 
 model Room {
@@ -193,4 +195,17 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([userId, isRead])
+}
+
+model Waitlist {
+  id        String   @id @default(cuid())
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id])
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  position  Int      // Queue position
+  createdAt DateTime @default(now())
+
+  @@unique([classId, studentId])
+  @@index([classId, position])
 }

@@ -8,6 +8,8 @@ import { errorHandler, notFoundHandler } from './middlewares/error-handler.middl
 import { requestIdMiddleware } from './middlewares/request-id.middleware';
 import { requestLogger } from './middlewares/request-logger.middleware';
 import authRoutes from './routes/auth.routes';
+import classRoutes from './routes/class.routes';
+import roomRoutes from './routes/room.routes';
 import studentRoutes from './routes/student.routes';
 import teacherRoutes from './routes/teacher.routes';
 import { success } from './utils/api-response';
@@ -42,6 +44,12 @@ app.use('/api/students', studentRoutes);
 
 // Teacher routes
 app.use('/api/teachers', teacherRoutes);
+
+// Class routes
+app.use('/api/classes', classRoutes);
+
+// Room routes
+app.use('/api/rooms', roomRoutes);
 
 // Root endpoint (uses new response format)
 app.get('/', (_req: Request, res: Response) => {
