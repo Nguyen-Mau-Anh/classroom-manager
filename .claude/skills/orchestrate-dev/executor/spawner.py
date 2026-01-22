@@ -451,6 +451,60 @@ class ClaudeSpawner:
 
         return self.spawn_with_prompt(prompt, timeout, stage_name=stage_name)
 
+    def spawn_agent(
+        self,
+        prompt: str,
+        timeout: Optional[int] = None,
+        background: bool = False,
+        task_id_prefix: Optional[str] = None,
+        on_complete: Optional[Callable[[TaskResult], None]] = None,
+    ) -> Union[TaskResult, BackgroundTask]:
+        """
+        Spawn a Claude agent with a custom prompt.
+
+        This is used for task-by-task execution where prompts are built
+        dynamically rather than from config.
+
+        Args:
+            prompt: The complete prompt to send to Claude
+            timeout: Override timeout in seconds
+            background: If True, run in background and return immediately
+            task_id_prefix: Prefix for task ID (helps with debugging)
+            on_complete: Callback for when background task completes
+
+        Returns:
+            TaskResult (blocking) or BackgroundTask (background)
+        """
+        if not background:
+            # Blocking execution
+            return self.spawn_with_prompt(
+                prompt=prompt,
+                timeout=timeout,
+                stage_name=task_id_prefix or "custom-agent"
+            )
+
+        # Background execution
+        actual_timeout = timeout or self.timeout_seconds
+
+        # Create task
+        self._task_counter += 1
+        task_id = f"{task_id_prefix or 'agent'}_{self._task_counter}"
+        task = BackgroundTask(
+            task_id=task_id,
+            stage_name=task_id_prefix or "custom-agent",
+            timeout=actual_timeout,
+        )
+
+        # Start background thread
+        def run_task():
+            self._execute_task(task, prompt, on_complete)
+
+        task._thread = threading.Thread(target=run_task, daemon=True)
+        task._thread.start()
+
+        self._active_tasks[task_id] = task
+        return task
+
     def spawn_with_prompt(
         self,
         prompt: str,
