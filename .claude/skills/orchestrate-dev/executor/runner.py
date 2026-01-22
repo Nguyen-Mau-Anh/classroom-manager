@@ -123,6 +123,14 @@ class PipelineRunner:
                 result.error = "Development failed"
                 return result
 
+            # Step 3.5: Validate story completion (CRITICAL GATE)
+            log("\n=== Step 3.5: Validating story completion ===")
+            passed = self._run_stage("story-validation", story_id=story_id, story_file=str(story_file))
+            result.stage_results["story-validation"] = "PASS" if passed else "SKIP" if self._is_disabled("story-validation") else "FAIL"
+            if not passed and not self._is_disabled("story-validation") and self._should_abort("story-validation"):
+                result.error = "Story validation failed - story is incomplete"
+                return result
+
             # Step 4: Lint
             log("\n=== Step 4: Running lint ===")
             passed = self._run_stage("lint", story_id=story_id, story_file=str(story_file))
