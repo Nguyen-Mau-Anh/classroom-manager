@@ -254,7 +254,18 @@ class PipelineRunner:
         # Create new story - SPAWN agent (never do in parent context)
         log("  Spawning create-story agent...")
 
-        task = self.spawner.spawn_stage("create-story", background=True)
+        # Get lessons for create-story stage
+        limit = self._get_knowledge_limit("create-story")
+        lessons = self.knowledge.get_lessons_for_stage("create-story", limit=limit)
+
+        kwargs = {}
+        if lessons:
+            log(f"  📚 Applying {len(lessons)} lesson(s) from previous runs")
+            kwargs['known_issues'] = self.knowledge.format_for_prompt(lessons)
+        else:
+            kwargs['known_issues'] = ""
+
+        task = self.spawner.spawn_stage("create-story", background=True, **kwargs)
         log(f"  Task started: {task.task_id}")
 
         task_result = self._wait_for_task(task, "create-story")

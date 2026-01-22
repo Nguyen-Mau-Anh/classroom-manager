@@ -143,6 +143,7 @@ class ClaudeSpawner:
                 "story_file": kwargs.get("story_file", "{story_file}"),
                 "errors": kwargs.get("errors", "{errors}"),
                 "files_changed": kwargs.get("files_changed", "{files_changed}"),
+                "known_issues": kwargs.get("known_issues", ""),  # Default to empty
             }
             return prompt.format(**kwargs_with_defaults).strip()
 
