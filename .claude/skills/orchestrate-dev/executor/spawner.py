@@ -469,15 +469,16 @@ class ClaudeSpawner:
         temp_dir = self.project_root / ".orchestrate-temp"
         temp_dir.mkdir(exist_ok=True)
 
+        # Determine task label for file names and logging
+        task_label = stage_name if stage_name else "task"
+
         # Create temp files for output
-        task_id = f"blocking_{int(time.time())}"
+        task_id = f"{task_label}_{int(time.time())}"
         stdout_path = temp_dir / f"{task_id}.stdout"
         stderr_path = temp_dir / f"{task_id}.stderr"
 
         stdout_file = open(stdout_path, 'w+')
         stderr_file = open(stderr_path, 'w+')
-
-        task_label = stage_name if stage_name else "task"
 
         print(f"[spawner] Blocking spawn: {' '.join(cmd[:5])}...", flush=True)
         print(f"[spawner] Temp files: {stdout_path}, {stderr_path}", flush=True)
