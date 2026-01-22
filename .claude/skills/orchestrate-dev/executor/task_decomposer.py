@@ -32,8 +32,8 @@ def parse_story_tasks(story_file: Path) -> List[Task]:
     content = story_file.read_text()
     tasks = []
 
-    # Find Tasks section
-    tasks_match = re.search(r'^##\s*Tasks\s*$', content, re.MULTILINE)
+    # Find Tasks section (supports both "## Tasks" and "## Tasks / Subtasks")
+    tasks_match = re.search(r'^##\s*Tasks\s*(/\s*Subtasks)?', content, re.MULTILINE)
     if not tasks_match:
         return []
 

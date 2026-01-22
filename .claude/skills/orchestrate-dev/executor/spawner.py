@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import time
 import threading
+import atexit
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Dict, List, Union
@@ -111,6 +112,10 @@ class ClaudeSpawner:
         self.config = config
         self._task_counter = 0
         self._active_tasks: Dict[str, BackgroundTask] = {}
+        self._all_spawned_processes: List[subprocess.Popen] = []  # Track all spawned Popen objects
+
+        # Register cleanup handler to kill orphaned processes on exit
+        atexit.register(self._cleanup_all_processes)
 
     def set_config(self, config: DevConfig) -> None:
         """Set the config after initialization."""
@@ -261,6 +266,9 @@ class ClaudeSpawner:
 
             print(f"[spawner] Process started with PID {task.process.pid}", flush=True)
 
+            # Track process for cleanup on exit
+            self._all_spawned_processes.append(task.process)
+
             # Poll for completion (non-blocking)
             poll_interval = 0.5
             last_log = time.time()
@@ -283,6 +291,10 @@ class ClaudeSpawner:
             # Process finished or timed out
             exit_code = task.process.returncode if task.process.returncode is not None else -1
             print(f"[spawner] Task {task.task_id} process ended, exit_code={exit_code}", flush=True)
+
+            # Remove from tracking (process is done)
+            if task.process in self._all_spawned_processes:
+                self._all_spawned_processes.remove(task.process)
 
             # Flush and close file handles
             try:
@@ -552,6 +564,9 @@ class ClaudeSpawner:
 
             print(f"[spawner] Process started with PID {process.pid}", flush=True)
 
+            # Track process for cleanup on exit
+            self._all_spawned_processes.append(process)
+
             # Poll for completion
             poll_interval = 0.5
             last_log = time.time()
@@ -587,6 +602,10 @@ class ClaudeSpawner:
 
             # Process completed
             print(f"[spawner] Blocking task completed, exit_code={process.returncode}", flush=True)
+
+            # Remove from tracking (process is done)
+            if process in self._all_spawned_processes:
+                self._all_spawned_processes.remove(process)
 
             stdout_file.flush()
             stdout_file.close()
@@ -631,23 +650,81 @@ class ClaudeSpawner:
             )
 
     def _kill_process_tree(self, process: Optional[subprocess.Popen]) -> None:
-        """Kill a process and all its children."""
+        """
+        Kill a process and all its children.
+
+        Tries multiple strategies to ensure process is terminated.
+        """
         if not process:
             return
 
-        try:
-            if os.name != 'nt':
-                pgid = os.getpgid(process.pid)
+        pid = process.pid
+
+        if os.name != 'nt':
+            # Unix/Mac: Kill process group to get children too
+            try:
+                pgid = os.getpgid(pid)
+                # Send SIGTERM first (graceful)
                 os.killpg(pgid, signal.SIGTERM)
                 time.sleep(0.3)
+
+                # Check if still alive
+                if process.poll() is None:
+                    # Still alive, force kill
+                    try:
+                        os.killpg(pgid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass  # Already dead
+
+            except (ProcessLookupError, PermissionError, OSError):
+                # Fallback: Kill process directly (not process group)
                 try:
-                    os.killpg(pgid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-            else:
+                    os.kill(pid, signal.SIGTERM)
+                    time.sleep(0.3)
+                    if process.poll() is None:
+                        os.kill(pid, signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    pass  # Already dead
+        else:
+            # Windows: Use process.kill()
+            try:
                 process.kill()
-        except (ProcessLookupError, PermissionError, OSError):
-            pass
+            except (ProcessLookupError, OSError):
+                pass  # Already dead
+
+    def _cleanup_all_processes(self) -> None:
+        """
+        Cleanup handler called on exit to kill all orphaned processes.
+
+        This prevents spawned Claude processes from running forever
+        if the orchestrator exits unexpectedly.
+        """
+        if not self._all_spawned_processes:
+            return
+
+        print(f"[spawner] CLEANUP: Killing {len(self._all_spawned_processes)} spawned processes...", flush=True)
+
+        for process in self._all_spawned_processes:
+            try:
+                # Check if process still running
+                if process.poll() is not None:
+                    # Already dead
+                    continue
+
+                pid = process.pid
+                print(f"[spawner] CLEANUP: Killing process {pid}...", flush=True)
+
+                # Use process tree kill method
+                self._kill_process_tree(process)
+
+                # Wait a bit for kill to take effect
+                time.sleep(0.1)
+
+            except (ProcessLookupError, OSError) as e:
+                # Process doesn't exist or permission error
+                print(f"[spawner] CLEANUP: Error killing process: {e}", flush=True)
+
+        print(f"[spawner] CLEANUP: Complete", flush=True)
 
     def get_active_tasks(self) -> Dict[str, BackgroundTask]:
         """Get all active (running) background tasks."""
