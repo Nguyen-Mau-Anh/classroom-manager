@@ -449,12 +449,13 @@ class ClaudeSpawner:
             if stage:
                 timeout = stage.timeout
 
-        return self.spawn_with_prompt(prompt, timeout)
+        return self.spawn_with_prompt(prompt, timeout, stage_name=stage_name)
 
     def spawn_with_prompt(
         self,
         prompt: str,
         timeout: Optional[int] = None,
+        stage_name: Optional[str] = None,
     ) -> TaskResult:
         """
         Spawn Claude CLI with a pre-built prompt (blocking).
@@ -475,6 +476,8 @@ class ClaudeSpawner:
 
         stdout_file = open(stdout_path, 'w+')
         stderr_file = open(stderr_path, 'w+')
+
+        task_label = stage_name if stage_name else "task"
 
         print(f"[spawner] Blocking spawn: {' '.join(cmd[:5])}...", flush=True)
         print(f"[spawner] Temp files: {stdout_path}, {stderr_path}", flush=True)
@@ -502,11 +505,11 @@ class ClaudeSpawner:
                 elapsed = time.time() - start_time
 
                 if time.time() - last_log >= 30:
-                    print(f"[spawner] Blocking task still running ({elapsed:.0f}s)", flush=True)
+                    print(f"[spawner] {task_label} still running ({elapsed:.0f}s)", flush=True)
                     last_log = time.time()
 
                 if elapsed > actual_timeout:
-                    print(f"[spawner] Blocking task TIMEOUT", flush=True)
+                    print(f"[spawner] {task_label} TIMEOUT", flush=True)
                     self._kill_process_tree(process)
 
                     stdout_file.flush()
