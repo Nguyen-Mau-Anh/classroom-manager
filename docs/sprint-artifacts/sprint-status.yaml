@@ -56,7 +56,7 @@ development_status:
   1-1-teacher-management: review
   1-2-student-management: in-progress
   1-3-class-and-room-management: in-progress
-  1-4-subject-management: backlog
+  1-4-subject-management: ready-for-dev
   epic-1-retrospective: optional
 
   # Epic 2: Scheduling & Time Bank

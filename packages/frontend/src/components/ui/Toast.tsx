@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 
 export interface ToastProps {
   message: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'warning';
   onClose: () => void;
   duration?: number;
 }
@@ -20,6 +20,7 @@ export const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration =
     success: 'bg-green-500',
     error: 'bg-red-500',
     info: 'bg-blue-500',
+    warning: 'bg-yellow-500',
   }[type];
 
   return (
@@ -49,7 +50,7 @@ export const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration =
 
 // Toast context for managing toasts
 interface ToastContextType {
-  showToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  showToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -65,14 +66,14 @@ export const useToast = () => {
 interface ToastState {
   id: number;
   message: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'warning';
 }
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastState[]>([]);
   const nextId = useRef(0);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning') => {
     const id = nextId.current++;
     setToasts((prev) => [...prev, { id, message, type }]);
   };

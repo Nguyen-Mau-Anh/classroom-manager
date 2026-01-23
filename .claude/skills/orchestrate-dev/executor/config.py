@@ -16,7 +16,7 @@ class RetryConfig(BaseModel):
 
 class StageConfig(BaseModel):
     """Configuration for a single stage."""
-    order: int = 0  # Made optional with default
+    order: float = 0  # Supports fractional ordering (e.g., 3.5 for between 3 and 4)
     enabled: bool = True
     execution: str = "spawn"  # "spawn" or "direct"
     type: str = "bmad_workflow"  # "bmad_workflow" or "bash"
@@ -30,6 +30,20 @@ class StageConfig(BaseModel):
     description: Optional[str] = None
     # Prompt template for spawn stages - supports {story_id}, {story_file}, {errors}, {files_changed}
     prompt: Optional[str] = None
+
+
+class KnowledgeBaseConfig(BaseModel):
+    """Configuration for knowledge base / lessons learned system."""
+    enabled: bool = True
+    max_lessons_per_stage: Optional[int] = None  # None = all lessons
+    min_encounter_count: int = 1
+    stage_overrides: Optional[Dict[str, Dict[str, int]]] = Field(default_factory=dict)
+
+
+class TaskDecompositionConfig(BaseModel):
+    """Configuration for task decomposition / task-by-task execution."""
+    enabled: bool = True  # Enable auto task decomposition
+    threshold: int = 6  # Decompose if >= N incomplete tasks
 
 
 class DevConfig(BaseModel):
@@ -58,6 +72,12 @@ Do not ask follow-up questions."""
         "lint_result", "typecheck_result", "test_results",
         "review_findings", "status"
     ])
+
+    # Knowledge base configuration
+    knowledge_base: KnowledgeBaseConfig = Field(default_factory=KnowledgeBaseConfig)
+
+    # Task decomposition configuration
+    task_decomposition: TaskDecompositionConfig = Field(default_factory=TaskDecompositionConfig)
 
 
 class ConfigLoader:
@@ -105,6 +125,11 @@ class ConfigLoader:
                         stage_data["retry"] = RetryConfig(**stage_data["retry"])
                     stages[name] = StageConfig(**stage_data)
 
+        # Parse knowledge_base config
+        kb_config = KnowledgeBaseConfig()
+        if "knowledge_base" in data and isinstance(data["knowledge_base"], dict):
+            kb_config = KnowledgeBaseConfig(**data["knowledge_base"])
+
         return DevConfig(
             name=data.get("name", "orchestrate-dev"),
             version=data.get("version", "1.0.0"),
@@ -114,6 +139,7 @@ class ConfigLoader:
             story_locations=data.get("story_locations", []),
             stages=stages,
             output=data.get("output", []),
+            knowledge_base=kb_config,
         )
 
     def find_story_file(self, story_id: str, config: DevConfig) -> Optional[Path]:

@@ -14,6 +14,14 @@ from dataclasses import dataclass, field
 
 from .config import ConfigLoader, DevConfig, StageConfig
 from .spawner import ClaudeSpawner, TaskResult, BackgroundTask, TaskStatus
+from .knowledge import KnowledgeBase, classify_error, extract_error_pattern
+from .task_decomposer import (
+    parse_story_tasks,
+    should_decompose,
+    get_incomplete_tasks,
+    format_task_for_agent,
+    format_tasks_summary,
+)
 
 
 def log(msg: str) -> None:
@@ -45,7 +53,40 @@ class PipelineRunner:
         self.project_root = Path(project_root)
         self.config_loader = ConfigLoader(project_root)
         self.spawner = ClaudeSpawner(project_root)
+        self.knowledge = KnowledgeBase(project_root)
         self.config: Optional[DevConfig] = None
+
+    def _get_knowledge_limit(self, stage_name: str) -> Optional[int]:
+        """
+        Get max lessons limit from config for a stage.
+
+        Returns:
+            None = load all lessons
+            int = limit to N lessons
+        """
+        if not self.config:
+            return None  # Default to all lessons if no config
+
+        # Get knowledge_base config
+        kb_config = self.config.knowledge_base
+
+        # Check if knowledge base is disabled
+        if not kb_config.enabled:
+            return 0  # Don't load any lessons
+
+        # Check for per-stage override
+        if kb_config.stage_overrides and stage_name in kb_config.stage_overrides:
+            stage_limit = kb_config.stage_overrides[stage_name].get('max_lessons')
+            if stage_limit == 0 or stage_limit is None:
+                return None  # All lessons
+            return stage_limit
+
+        # Get global limit
+        global_limit = kb_config.max_lessons_per_stage
+        if global_limit == 0 or global_limit is None:
+            return None  # All lessons
+
+        return global_limit
 
     def run(self, story_id: Optional[str] = None) -> PipelineResult:
         """Run the complete pipeline."""
@@ -81,12 +122,40 @@ class PipelineRunner:
                 result.error = "Validation failed"
                 return result
 
-            # Step 3: Develop story
+            # Step 3: Develop story (with optional task decomposition)
             log("\n=== Step 3: Developing story ===")
-            passed = self._run_stage("develop", story_id=story_id, story_file=str(story_file))
+
+            # Check if task decomposition is enabled
+            decomp_enabled = self.config.task_decomposition.enabled
+            decomp_threshold = self.config.task_decomposition.threshold
+
+            if decomp_enabled:
+                # Parse tasks from story file
+                tasks = parse_story_tasks(story_file)
+                log(f"  Story has {format_tasks_summary(tasks)}")
+
+                # Auto-detect if decomposition is needed
+                if should_decompose(tasks, threshold=decomp_threshold):
+                    log(f"  Using task-by-task execution ({len(get_incomplete_tasks(tasks))} tasks >= {decomp_threshold} threshold)")
+                    passed = self._run_task_by_task_development(story_id, str(story_file), tasks)
+                else:
+                    log(f"  Using standard dev-story workflow (only {len(get_incomplete_tasks(tasks))} incomplete tasks)")
+                    passed = self._run_stage("develop", story_id=story_id, story_file=str(story_file))
+            else:
+                log("  Task decomposition disabled, using standard dev-story workflow")
+                passed = self._run_stage("develop", story_id=story_id, story_file=str(story_file))
+
             result.stage_results["develop"] = "PASS" if passed else "SKIP" if self._is_disabled("develop") else "FAIL"
             if not passed and not self._is_disabled("develop") and self._should_abort("develop"):
                 result.error = "Development failed"
+                return result
+
+            # Step 3.5: Validate story completion (CRITICAL GATE)
+            log("\n=== Step 3.5: Validating story completion ===")
+            passed = self._run_stage("story-validation", story_id=story_id, story_file=str(story_file))
+            result.stage_results["story-validation"] = "PASS" if passed else "SKIP" if self._is_disabled("story-validation") else "FAIL"
+            if not passed and not self._is_disabled("story-validation") and self._should_abort("story-validation"):
+                result.error = "Story validation failed - story is incomplete"
                 return result
 
             # Step 4: Lint
@@ -115,10 +184,15 @@ class PipelineRunner:
 
             # Step 7: Code review
             log("\n=== Step 7: Running code review ===")
+
+            # Collect files changed from git (limit to prevent overload)
+            files_changed_list = self._get_changed_files(limit=20)
+            result.files_changed = files_changed_list
+
             passed = self._run_stage(
                 "code-review",
                 story_id=story_id,
-                files_changed=", ".join(result.files_changed) if result.files_changed else "unknown"
+                files_changed=", ".join(files_changed_list) if files_changed_list else "No files changed"
             )
             result.stage_results["code-review"] = "PASS" if passed else "SKIP" if self._is_disabled("code-review") else "FAIL"
             # Code review is non-blocking by default
@@ -219,7 +293,18 @@ class PipelineRunner:
         # Create new story - SPAWN agent (never do in parent context)
         log("  Spawning create-story agent...")
 
-        task = self.spawner.spawn_stage("create-story", background=True)
+        # Get lessons for create-story stage
+        limit = self._get_knowledge_limit("create-story")
+        lessons = self.knowledge.get_lessons_for_stage("create-story", limit=limit)
+
+        kwargs = {}
+        if lessons:
+            log(f"  📚 Applying {len(lessons)} lesson(s) from previous runs")
+            kwargs['known_issues'] = self.knowledge.format_for_prompt(lessons)
+        else:
+            kwargs['known_issues'] = ""
+
+        task = self.spawner.spawn_stage("create-story", background=True, **kwargs)
         log(f"  Task started: {task.task_id}")
 
         task_result = self._wait_for_task(task, "create-story")
@@ -268,12 +353,112 @@ class PipelineRunner:
 
         return story_id, None
 
+    def _run_task_by_task_development(
+        self,
+        story_id: str,
+        story_file: str,
+        tasks: List,
+    ) -> bool:
+        """
+        Execute story development task-by-task with separate agents.
+
+        Each task gets a fresh agent context to prevent context overload
+        and ensure focused implementation.
+
+        Args:
+            story_id: Story identifier
+            story_file: Path to story file
+            tasks: List of Task objects to implement
+
+        Returns:
+            True if all tasks completed successfully, False otherwise
+        """
+        incomplete_tasks = get_incomplete_tasks(tasks)
+
+        if not incomplete_tasks:
+            log("  All tasks already complete!")
+            return True
+
+        log(f"  Executing {len(incomplete_tasks)} tasks one-by-one with fresh agents...")
+
+        # Get knowledge base limit for develop stage
+        limit = self._get_knowledge_limit("develop")
+
+        for task in incomplete_tasks:
+            log(f"\n  --- Task #{task.index}/{len(tasks)} ---")
+            task_preview = task.content.split('\n')[0][:80]
+            log(f"  {task_preview}...")
+
+            # Get lessons for develop stage (same as normal develop)
+            lessons = self.knowledge.get_lessons_for_stage("develop", limit=limit)
+            lesson_ids = [l["id"] for l in lessons]
+
+            if lessons:
+                log(f"  📚 Applying {len(lessons)} lesson(s)")
+
+            # Create focused prompt for this specific task
+            task_prompt = format_task_for_agent(task, story_id, story_file)
+
+            # Add autonomy instructions and known issues
+            full_prompt = f"""
+/bmad:bmm:workflows:dev-story
+{self.config.autonomy_instructions}
+
+{self.knowledge.format_for_prompt(lessons) if lessons else ""}
+
+{task_prompt}
+"""
+
+            # Spawn agent for this task
+            log(f"  Spawning agent for task #{task.index}...")
+            task_bg = self.spawner.spawn_agent(
+                prompt=full_prompt,
+                background=True,
+                task_id_prefix=f"develop-task-{task.index}"
+            )
+
+            # Wait for task completion
+            task_result = self._wait_for_task(task_bg, f"task-{task.index}")
+
+            if not task_result.success:
+                log(f"  Task #{task.index} FAILED: {task_result.error[:200] if task_result.error else 'unknown'}...")
+
+                # Try to fix with retry
+                stage_config = self.config.stages.get("develop")
+                if stage_config and stage_config.retry and stage_config.retry.max > 0:
+                    log(f"  Retrying task #{task.index}...")
+
+                    retry_task = self.spawner.spawn_agent(
+                        prompt=full_prompt,
+                        background=True,
+                        task_id_prefix=f"develop-task-{task.index}-retry"
+                    )
+                    retry_result = self._wait_for_task(retry_task, f"task-{task.index}-retry")
+
+                    if retry_result.success:
+                        log(f"  Task #{task.index} PASSED on retry")
+                        continue
+
+                log(f"  Task #{task.index} failed after retry, aborting")
+                return False
+
+            log(f"  Task #{task.index} PASSED")
+
+            # Track prevention if lessons were shown
+            if lessons:
+                self.knowledge.track_prevention("develop", lesson_ids)
+
+        log(f"\n  All {len(incomplete_tasks)} tasks completed successfully!")
+        return True
+
     def _run_spawn_stage(self, stage_name: str, **kwargs) -> bool:
         """
         Run a stage by spawning an agent.
 
         IMPORTANT: All work is done by the spawned agent.
         The orchestrator only waits for completion.
+
+        Integrates knowledge base to inject lessons and capture fixes.
         """
         stage_config = self.config.stages.get(stage_name)
         if not stage_config:
@@ -281,6 +466,20 @@ class PipelineRunner:
             return True
 
         max_retries = stage_config.retry.max if stage_config.retry else 0
+
+        # Get relevant lessons for this stage
+        limit = self._get_knowledge_limit(stage_name)
+        lessons = self.knowledge.get_lessons_for_stage(stage_name, limit=limit)
+        lesson_ids = [l["id"] for l in lessons]
+
+        if lessons:
+            log(f"  📚 Applying {len(lessons)} lesson(s) from previous runs")
+            # Add lessons to kwargs for prompt injection
+            kwargs['known_issues'] = self.knowledge.format_for_prompt(lessons)
+        else:
+            kwargs['known_issues'] = ""
+
+        first_error = None
 
         for attempt in range(max_retries + 1):
             log(f"  Spawning {stage_name} agent (attempt {attempt + 1}/{max_retries + 1})...")
@@ -290,13 +489,43 @@ class PipelineRunner:
 
             if task_result.success:
                 log(f"  {stage_name} PASSED ({task_result.duration_seconds:.1f}s)")
+
+                # Track prevention if lessons were shown and first attempt succeeded
+                if lessons and attempt == 0:
+                    self.knowledge.track_prevention(stage_name, lesson_ids)
+                    log(f"  💡 {len(lessons)} lesson(s) helped prevent errors")
+
+                # Capture lesson if this was a fix after failure
+                if attempt > 0 and first_error:
+                    lesson_id = self.knowledge.add_lesson(
+                        stage=stage_name,
+                        error_type=classify_error(first_error),
+                        error_pattern=extract_error_pattern(first_error),
+                        error_message=first_error,
+                        context={
+                            "file": kwargs.get("story_file", "unknown"),
+                            "story_id": kwargs.get("story_id", "unknown")
+                        },
+                        fix={
+                            "description": f"Fix applied after {attempt} retries",
+                            "action": "retry_with_fix"
+                        },
+                        success=True,
+                        story_id=kwargs.get("story_id")
+                    )
+                    log(f"  💡 Saved lesson: {lesson_id}")
+
                 return True
 
             log(f"  {stage_name} FAILED")
 
+            # Save first error for lesson capture
+            if attempt == 0:
+                first_error = task_result.error
+
             # If we have retries left and on_failure is fix_and_retry, spawn fix agent
             if attempt < max_retries and stage_config.on_failure == "fix_and_retry":
-                log(f"  Spawning fix agent for {stage_name}...")
+                log(f"  Attempt {attempt + 1} failed, will retry...")
                 # The retry prompt in config should handle the fix
                 # We just retry the stage which will attempt to fix
                 continue
@@ -316,6 +545,8 @@ class PipelineRunner:
         IMPORTANT: The orchestrator ONLY runs the check command.
         If the check fails, it spawns a dev agent to fix.
         The orchestrator NEVER fixes issues itself.
+
+        Integrates knowledge base to track errors and fixes.
         """
         stage_config = self.config.stages.get(stage_name)
         if not stage_config:
@@ -329,6 +560,16 @@ class PipelineRunner:
 
         max_retries = stage_config.retry.max if stage_config.retry else 0
         timeout = stage_config.timeout or 120
+
+        # Get relevant lessons for this stage
+        limit = self._get_knowledge_limit(stage_name)
+        lessons = self.knowledge.get_lessons_for_stage(stage_name, limit=limit)
+        lesson_ids = [l["id"] for l in lessons]
+
+        if lessons:
+            log(f"  📚 {len(lessons)} lesson(s) available for {stage_name}")
+
+        first_error = None
 
         for attempt in range(max_retries + 1):
             log(f"  Running: {command} (attempt {attempt + 1}/{max_retries + 1})...")
@@ -346,22 +587,56 @@ class PipelineRunner:
 
                 if proc.returncode == 0:
                     log(f"  {stage_name} PASSED")
+
+                    # Track prevention if lessons were available and first attempt succeeded
+                    if lessons and attempt == 0:
+                        self.knowledge.track_prevention(stage_name, lesson_ids)
+                        log(f"  💡 {len(lessons)} lesson(s) helped prevent errors")
+
+                    # Capture lesson if this was a fix after failure
+                    if attempt > 0 and first_error:
+                        lesson_id = self.knowledge.add_lesson(
+                            stage=stage_name,
+                            error_type=classify_error(first_error),
+                            error_pattern=extract_error_pattern(first_error),
+                            error_message=first_error,
+                            context={"command": command},
+                            fix={
+                                "description": f"Fix applied after {attempt} retries",
+                                "action": "fix_agent_applied"
+                            },
+                            success=True,
+                            story_id=None
+                        )
+                        log(f"  💡 Saved lesson: {lesson_id}")
+
                     return True
 
                 # Command failed - get errors
                 errors = (proc.stdout + proc.stderr).strip()
                 log(f"  {stage_name} FAILED (exit code {proc.returncode})")
 
+                # Save first error for lesson capture
+                if attempt == 0:
+                    first_error = errors
+
                 # If we have retries left, SPAWN an agent to fix (never fix in parent context)
                 if attempt < max_retries and stage_config.on_failure == "fix_and_retry":
                     log(f"  Spawning dev agent to fix {stage_name} errors...")
                     log(f"  Error preview: {errors[:300]}...")
 
-                    # Spawn fix agent with error context
+                    # Add lessons to fix agent context
+                    fix_kwargs = {"errors": errors}
+                    if lessons:
+                        fix_kwargs['known_issues'] = self.knowledge.format_for_prompt(lessons)
+                    else:
+                        fix_kwargs['known_issues'] = ""
+
+                    # Spawn fix agent with error context and lessons
                     fix_task = self.spawner.spawn_stage(
                         stage_name,
                         background=True,
-                        errors=errors
+                        **fix_kwargs
                     )
                     fix_result = self._wait_for_task(fix_task, f"{stage_name}-fix")
 
@@ -383,6 +658,56 @@ class PipelineRunner:
 
         log(f"  {stage_name} failed after {max_retries + 1} attempts")
         return False
+
+    def _get_changed_files(self, limit: int = 20) -> List[str]:
+        """
+        Get list of changed files from git.
+
+        Args:
+            limit: Maximum number of files to return (prevents overload)
+
+        Returns:
+            List of changed file paths (relative to project root)
+        """
+        try:
+            # Get files changed in working directory + staged
+            result = subprocess.run(
+                ['git', 'diff', '--name-only', 'HEAD'],
+                cwd=str(self.project_root),
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if result.returncode == 0:
+                files = [f.strip() for f in result.stdout.strip().split('\n') if f.strip()]
+
+                # Filter out large or binary files
+                filtered_files = []
+                for file_path in files[:limit]:  # Apply limit
+                    full_path = self.project_root / file_path
+
+                    # Skip if file doesn't exist
+                    if not full_path.exists():
+                        continue
+
+                    # Skip if file is too large (> 100KB)
+                    if full_path.stat().st_size > 100 * 1024:
+                        log(f"  Skipping large file: {file_path} ({full_path.stat().st_size / 1024:.1f}KB)")
+                        continue
+
+                    # Skip binary files (common extensions)
+                    if file_path.endswith(('.png', '.jpg', '.jpeg', '.gif', '.pdf', '.zip', '.tar', '.gz')):
+                        continue
+
+                    filtered_files.append(file_path)
+
+                return filtered_files
+
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, Exception) as e:
+            log(f"  Warning: Could not get changed files from git: {e}")
+
+        return []
 
     def _print_summary(self, result: PipelineResult) -> None:
         """Print final summary."""

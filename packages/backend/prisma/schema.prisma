@@ -87,6 +87,7 @@ model Subject {
   code        String   @unique
   description String?
   isMandatory Boolean  @default(false)
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -95,6 +96,9 @@ model Subject {
   qualifications  TeacherQualification[]
   timeSlots       TimeSlot[]
   enrollments     Enrollment[]
+
+  @@index([code])
+  @@index([isMandatory])
 }
 
 model TeacherQualification {
