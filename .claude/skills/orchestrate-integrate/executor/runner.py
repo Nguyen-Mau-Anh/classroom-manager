@@ -96,15 +96,50 @@ class PipelineRunner:
 
             # Check for incomplete stories first (if no specific story requested)
             if not story_input:
-                incomplete_stories = self.story_manager.find_incomplete_stories(
-                    self.config.story_locations
-                )
-                if incomplete_stories:
-                    story_id, story_file = incomplete_stories[0]
-                    log(f"  ✓ Found incomplete story: {story_id}")
-                    log(f"  ✓ Will continue working on: {story_file}")
+                # Step 1: Check sprint-status.yaml for incomplete stories
+                incomplete_ids = self.story_manager.get_incomplete_from_sprint_status()
+                story_id = None
+                story_file = None
 
-                    # Read and display status
+                if incomplete_ids:
+                    log(f"  Found {len(incomplete_ids)} incomplete stories in sprint-status.yaml: {', '.join(incomplete_ids[:3])}")
+
+                    # Try to find file for each incomplete ID (in order)
+                    for incomplete_id in incomplete_ids:
+                        potential_file = self.config_loader.find_story_file(incomplete_id, self.config)
+                        if potential_file:
+                            # Check if story is actually complete (file status may differ from YAML)
+                            file_status = self.story_manager.read_story_status(potential_file)
+                            if file_status and file_status.is_complete:
+                                log(f"  ⊘ Skipping {incomplete_id}: file shows complete (updating sprint-status)")
+                                # Update sprint-status.yaml to match file
+                                self.story_manager.update_sprint_status(incomplete_id, "done")
+                                continue  # Skip to next story
+
+                            story_id = incomplete_id
+                            story_file = potential_file
+                            log(f"  ✓ Selected story from sprint-status: {story_id}")
+                            log(f"  ✓ Story file exists: {story_file}")
+                            break
+                        else:
+                            log(f"  ℹ️  Story {incomplete_id} in sprint-status but file not found (will create)")
+                            story_id = incomplete_id
+                            story_file = None
+                            break
+
+                # Step 2: If no story from sprint-status, search filesystem
+                if not story_id and not story_file:
+                    log("  No tracked incomplete stories, searching filesystem...")
+                    incomplete_stories = self.story_manager.find_incomplete_stories(
+                        self.config.story_locations
+                    )
+                    if incomplete_stories:
+                        story_id, story_file = incomplete_stories[0]
+                        log(f"  ✓ Found incomplete story in filesystem: {story_id}")
+                        log(f"  ✓ Will continue working on: {story_file}")
+
+                # Step 3: Display progress if we found a story file
+                if story_file:
                     status = self.story_manager.read_story_status(story_file)
                     if status:
                         log(f"  ✓ Progress: {status.completed_tasks}/{status.total_tasks} tasks complete")
@@ -112,8 +147,11 @@ class PipelineRunner:
                             log(f"  ⚠ {status.high_medium_incomplete} HIGH/MEDIUM review items incomplete")
 
                     # Validate we're not skipping an epic
-                    self._validate_epic_progression(story_id)
-                else:
+                    if story_id:
+                        self._validate_epic_progression(story_id)
+
+                # Step 4: If no incomplete work found, create new story
+                if not story_id and not story_file:
                     log("  No incomplete stories found, will create new one")
 
                     # Before creating new story, validate current epic is complete

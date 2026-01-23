@@ -36,6 +36,11 @@ class StoryFileManager:
         """
         Read story file and parse completion status.
 
+        Supports multiple formats:
+        - ## Status section with status value
+        - Metadata format: **Status:** value
+        - Completion date: **Completed:** date
+
         Returns StoryStatus with checkbox counts and current status.
         """
         if not story_file or not story_file.exists():
@@ -47,9 +52,23 @@ class StoryFileManager:
             # Extract story ID from filename
             story_id = story_file.stem
 
-            # Find status field (usually at bottom: "## Status\ndone")
-            status_match = re.search(r'^## Status\s*\n([a-z-]+)', content, re.MULTILINE)
-            current_status = status_match.group(1) if status_match else "unknown"
+            # Check for metadata format first (priority)
+            metadata_status_match = re.search(r'^\*\*Status:\*\*\s+(\w+)', content, re.MULTILINE)
+            completed_date_match = re.search(r'^\*\*Completed:\*\*\s+\d{4}-\d{2}-\d{2}', content, re.MULTILINE)
+
+            # Find status field (section format: "## Status\ndone")
+            section_status_match = re.search(r'^## Status\s*\n([a-z-]+)', content, re.MULTILINE)
+
+            # Determine current status (prioritize metadata over section)
+            if metadata_status_match:
+                current_status = metadata_status_match.group(1).lower()
+            elif section_status_match:
+                current_status = section_status_match.group(1)
+            else:
+                current_status = "unknown"
+
+            # If there's a completed date in metadata, consider it done
+            has_completed_date = completed_date_match is not None
 
             # Count tasks: ## Tasks or ## Acceptance Criteria sections
             task_pattern = r'^- \[([ x])\] (?!\[AI-Review\])'  # Exclude AI-Review items
@@ -67,11 +86,14 @@ class StoryFileManager:
                 if re.match(r'^- \[ \] \[AI-Review\]\[(HIGH|MEDIUM)\]', line):
                     high_medium_incomplete += 1
 
+            # Determine if story is complete
+            # Consider "completed" status as equivalent to "done"
+            status_is_done = current_status in ["done", "completed"]
+
             is_complete = (
-                completed_tasks == len(tasks) and
-                len(tasks) > 0 and
-                high_medium_incomplete == 0 and
-                current_status == "done"
+                (has_completed_date or status_is_done) and
+                (completed_tasks == len(tasks) or len(tasks) == 0) and
+                high_medium_incomplete == 0
             )
 
             return StoryStatus(
@@ -182,13 +204,13 @@ class StoryFileManager:
 
     def find_incomplete_stories(self, story_locations: List[str]) -> List[Tuple[str, Path]]:
         """
-        Find all incomplete story files.
+        Find all incomplete story files, prioritizing by epic number.
 
         Args:
             story_locations: List of location templates (e.g., "state/stories/${story_id}.md")
 
         Returns:
-            List of (story_id, story_file) tuples for incomplete stories
+            List of (story_id, story_file) tuples for incomplete stories, sorted by epic
         """
         incomplete = []
 
@@ -204,7 +226,62 @@ class StoryFileManager:
                     if status and not status.is_complete:
                         incomplete.append((status.story_id, file_path))
 
+        # Sort by epic number (extract first number from story_id)
+        def get_epic_num(story_tuple):
+            story_id = story_tuple[0]
+            match = re.match(r'^(\d+)', story_id)
+            if match:
+                return int(match.group(1))
+            return 999  # Put stories without epic number at end
+
+        incomplete.sort(key=get_epic_num)
+
         return incomplete
+
+    def get_incomplete_from_sprint_status(self) -> List[str]:
+        """
+        Get list of incomplete story IDs from sprint-status.yaml.
+
+        Returns story IDs that have status: in-progress, needs-fix, ready, or not_started
+        """
+        possible_files = [
+            self.project_root / "state/sprint-status.yaml",
+            self.project_root / "docs/sprint-status.yaml",
+            self.project_root / "sprint-status.yaml",
+        ]
+
+        sprint_file = None
+        for f in possible_files:
+            if f.exists():
+                sprint_file = f
+                break
+
+        if not sprint_file:
+            return []
+
+        try:
+            with open(sprint_file, 'r') as f:
+                data = yaml.safe_load(f) or {}
+
+            if 'development_status' not in data:
+                return []
+
+            incomplete_statuses = ['in-progress', 'needs-fix', 'ready', 'not-started', 'not_started']
+            incomplete_ids = []
+
+            for story_id, status in data['development_status'].items():
+                # Skip epic entries (e.g., "epic-1", "epic-1-retrospective")
+                if story_id.startswith('epic-'):
+                    continue
+
+                if status in incomplete_statuses:
+                    incomplete_ids.append(story_id)
+
+            return incomplete_ids
+
+        except Exception as e:
+            print(f"[story_utils] Error reading sprint-status.yaml: {e}")
+            return []
 
     def get_story_epic(self, story_id: str) -> Optional[str]:
         """
