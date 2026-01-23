@@ -6,11 +6,14 @@ on:
     types:
       - completed
     branches: [main]
-  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -21,7 +24,7 @@ jobs:
       contents: read
       packages: write
     # Only deploy if CI workflow succeeded
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout
@@ -68,33 +71,49 @@ jobs:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
-          source: "docker/docker-compose.staging.yml"
+          source: "docker/docker-compose.staging.yml,docker/.env.staging.template"
           target: "/opt/classroom-manager"
           strip_components: 1
 
       - name: Deploy to Staging Server
         id: deploy
         uses: appleboy/ssh-action@v1.0.0
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
+          envs: GITHUB_REPOSITORY
           script: |
             set -e
             cd /opt/classroom-manager
 
-            # Use staging docker-compose file
-            export COMPOSE_FILE=docker-compose.staging.yml
+            # Use staging docker-compose file with absolute path
+            export COMPOSE_FILE=/opt/classroom-manager/docker-compose.staging.yml
 
-            # Capture current deployment state for rollback
+            # Export GitHub repository for docker-compose env substitution
+            export GITHUB_REPOSITORY="${GITHUB_REPOSITORY}"
+
+            # Capture current running container image IDs for rollback
             echo "Capturing current deployment state..."
-            docker compose config --images > .previous-images || echo "No previous deployment"
+            if docker compose ps --format json 2>/dev/null | grep -q .; then
+              docker compose ps --format json | jq -r '.[].Image' > .previous-images || echo "No previous deployment"
+              # Tag current images for rollback
+              while read -r image; do
+                if [ -n "$image" ]; then
+                  docker tag "$image" "${image}-rollback" 2>/dev/null || true
+                fi
+              done < .previous-images
+            else
+              echo "No running containers found"
+            fi
 
-            # Pull new images
+            # Pull new images with error checking
             echo "Pulling new images..."
             docker compose pull || exit 1
 
-            # Stop containers gracefully before pruning
+            # Stop containers gracefully
             echo "Stopping old containers..."
             docker compose down --timeout 15
 
@@ -102,25 +121,21 @@ jobs:
             echo "Starting new containers..."
             docker compose up -d --remove-orphans
 
-            # Wait for containers to start
-            sleep 15
-
-            # Clean up old images
-            echo "Cleaning up old images..."
-            docker system prune -f
-
       - name: Health Check
         id: health_check
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
         run: |
           echo "Waiting for services to be ready..."
-          max_attempts=10
+          max_attempts=5
           attempt=1
-          sleep_time=5
+          sleep_time=10
+          max_sleep=30
 
           while [ $attempt -le $max_attempts ]; do
             echo "Health check attempt $attempt/$max_attempts..."
 
-            if curl -f -s --max-time 10 ${{ secrets.STAGING_URL }}/api/health > /dev/null 2>&1; then
+            if curl -f -S --max-time 10 "${STAGING_URL}/api/health"; then
               echo "Health check passed!"
               exit 0
             fi
@@ -128,7 +143,11 @@ jobs:
             if [ $attempt -lt $max_attempts ]; then
               echo "Health check failed, retrying in ${sleep_time}s..."
               sleep $sleep_time
-              sleep_time=$((sleep_time * 2))  # Exponential backoff
+              # Exponential backoff with cap
+              sleep_time=$((sleep_time * 2))
+              if [ $sleep_time -gt $max_sleep ]; then
+                sleep_time=$max_sleep
+              fi
               attempt=$((attempt + 1))
             else
               echo "Health check failed after $max_attempts attempts"
@@ -136,19 +155,43 @@ jobs:
             fi
           done
 
-      - name: Rollback on Failure
-        if: failure() && steps.deploy.conclusion == 'success'
+      - name: Cleanup on Success
+        if: success()
         uses: appleboy/ssh-action@v1.0.0
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
+          envs: GITHUB_REPOSITORY
+          script: |
+            cd /opt/classroom-manager
+            export COMPOSE_FILE=/opt/classroom-manager/docker-compose.staging.yml
+            export GITHUB_REPOSITORY="${GITHUB_REPOSITORY}"
+
+            # Clean up rollback images and old unused images
+            echo "Cleaning up old images..."
+            docker images | grep -- '-rollback' | awk '{print $3}' | xargs -r docker rmi -f || true
+            docker system prune -f
+
+      - name: Rollback on Failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.0
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          envs: GITHUB_REPOSITORY
           script: |
             set -e
             cd /opt/classroom-manager
 
-            # Use staging docker-compose file
-            export COMPOSE_FILE=docker-compose.staging.yml
+            # Use staging docker-compose file with absolute path
+            export COMPOSE_FILE=/opt/classroom-manager/docker-compose.staging.yml
+            export GITHUB_REPOSITORY="${GITHUB_REPOSITORY}"
 
             echo "Deployment failed, initiating rollback..."
 
@@ -159,11 +202,23 @@ jobs:
               # Stop failed containers
               docker compose down --timeout 15
 
-              # The previous images are still in Docker cache
-              # Restore to previous state by restarting with old images
+              # Update compose file to use rollback images
+              while read -r image; do
+                if [ -n "$image" ]; then
+                  rollback_image="${image}-rollback"
+                  if docker image inspect "$rollback_image" >/dev/null 2>&1; then
+                    # Temporarily tag rollback image as staging-latest
+                    original_tag=$(echo "$image" | sed 's/:.*$//')
+                    docker tag "$rollback_image" "$original_tag:staging-latest"
+                  fi
+                fi
+              done < .previous-images
+
+              # Restore to previous state with rollback images
               docker compose up -d --remove-orphans
 
               echo "Rollback completed. Previous deployment restored."
             else
               echo "No previous deployment found. Manual intervention required."
+              exit 1
             fi

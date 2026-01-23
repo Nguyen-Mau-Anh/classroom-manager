@@ -1,5 +1,21 @@
 import { APP_VERSION, formatUptime, getHealthStatus } from './health';
 
+// Mock Redis
+jest.mock('./lib/redis', () => ({
+  redis: {
+    status: 'ready',
+    ping: jest.fn().mockResolvedValue('PONG'),
+    connect: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
+// Mock Prisma
+jest.mock('./lib/prisma', () => ({
+  prisma: {
+    $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
+  },
+}));
+
 describe('health', () => {
   describe('APP_VERSION', () => {
     it('should be defined', () => {
@@ -9,25 +25,28 @@ describe('health', () => {
   });
 
   describe('getHealthStatus', () => {
-    it('should return healthy status', () => {
+    it('should return healthy status with service checks', async () => {
       const startTime = new Date();
-      const status = getHealthStatus(startTime);
+      const status = await getHealthStatus(startTime);
 
       expect(status.status).toBe('healthy');
       expect(status.version).toBe(APP_VERSION);
       expect(status.uptime).toBeGreaterThanOrEqual(0);
+      expect(status.services).toBeDefined();
+      expect(status.services.database).toBeDefined();
+      expect(status.services.redis).toBeDefined();
     });
 
-    it('should include ISO timestamp', () => {
+    it('should include ISO timestamp', async () => {
       const startTime = new Date();
-      const status = getHealthStatus(startTime);
+      const status = await getHealthStatus(startTime);
 
       expect(status.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     });
 
-    it('should calculate uptime correctly', () => {
+    it('should calculate uptime correctly', async () => {
       const startTime = new Date(Date.now() - 5000); // 5 seconds ago
-      const status = getHealthStatus(startTime);
+      const status = await getHealthStatus(startTime);
 
       expect(status.uptime).toBeGreaterThanOrEqual(4);
       expect(status.uptime).toBeLessThanOrEqual(6);

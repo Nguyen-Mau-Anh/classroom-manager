@@ -1,5 +1,21 @@
 import request from 'supertest';
 
+// Mock Redis
+jest.mock('./lib/redis', () => ({
+  redis: {
+    status: 'ready',
+    ping: jest.fn().mockResolvedValue('PONG'),
+    connect: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
+// Mock Prisma
+jest.mock('./lib/prisma', () => ({
+  prisma: {
+    $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
+  },
+}));
+
 import { app } from './server';
 
 interface ApiResponse<T> {
@@ -17,6 +33,10 @@ interface HealthData {
   timestamp: string;
   version: string;
   uptime: number;
+  services: {
+    database: string;
+    redis: string;
+  };
 }
 
 interface RootData {

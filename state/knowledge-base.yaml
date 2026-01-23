@@ -2,7 +2,7 @@ metadata:
   version: 1.0.0
   total_lessons: 2
   created: '2026-01-23T16:59:10.471781'
-  last_updated: '2026-01-23T23:53:18.333800'
+  last_updated: '2026-01-24T00:26:11.189643'
 lessons:
   typecheck-unknown-001:
     id: typecheck-unknown-001
@@ -38,7 +38,7 @@ lessons:
       action: fix_agent_applied
     success: true
     times_encountered: 1
-    times_prevented: 4
+    times_prevented: 5
     last_encountered: '2026-01-23'
   unit-test-unknown-001:
     id: unit-test-unknown-001
@@ -65,5 +65,5 @@ lessons:
       action: fix_agent_applied
     success: true
     times_encountered: 1
-    times_prevented: 4
+    times_prevented: 5
     last_encountered: '2026-01-23'

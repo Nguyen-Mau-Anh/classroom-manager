@@ -33,8 +33,28 @@ app.use(json({ limit: '10kb' }));
 
 // Health check endpoint (uses new response format)
 app.get('/api/health', (_req: Request, res: Response) => {
-  const health = getHealthStatus(startTime);
-  success(res, health);
+  void (async () => {
+    try {
+      const health = await getHealthStatus(startTime);
+      // Return 503 if any service is unhealthy
+      const statusCode = health.status === 'healthy' ? 200 : 503;
+      res.status(statusCode);
+      success(res, health);
+    } catch (error) {
+      logger.error({ err: error }, 'Health check error');
+      res.status(503);
+      success(res, {
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        version: '0.1.0',
+        uptime: 0,
+        services: {
+          database: 'unhealthy',
+          redis: 'unhealthy',
+        },
+      });
+    }
+  })();
 });
 
 // Auth routes
