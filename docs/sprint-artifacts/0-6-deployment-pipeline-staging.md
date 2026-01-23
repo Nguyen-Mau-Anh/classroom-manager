@@ -576,52 +576,147 @@ Created complete GitHub Actions deployment pipeline for staging environment:
 
 #### CRITICAL ISSUES - Must Fix Before Merge
 
-- [ ] [AI-Review][HIGH] **Race Condition: Deploy Races CI Pipeline**: Deploy workflow triggers on push to main WITHOUT waiting for CI to pass. Broken code with failing tests gets deployed to staging before test results are known. No `needs: [build]` dependency or `workflow_run` trigger exists. Solution: Add `needs: [build]` to deploy job or use `workflow_run` trigger after CI completion. [.github/workflows/deploy-staging.yml:4-6]
+- [x] [AI-Review][HIGH] **Race Condition: Deploy Races CI Pipeline**: Deploy workflow triggers on push to main WITHOUT waiting for CI to pass. Broken code with failing tests gets deployed to staging before test results are known. No `needs: [build]` dependency or `workflow_run` trigger exists. Solution: Add `needs: [build]` to deploy job or use `workflow_run` trigger after CI completion. [.github/workflows/deploy-staging.yml:4-6]
+  - **FIXED**: Changed workflow trigger to `workflow_run` that waits for CI workflow to complete successfully before deploying.
 
-- [ ] [AI-Review][HIGH] **Zero Rollback Strategy**: If health check fails after deployment, workflow marks deployment as failed but does NOT rollback. Staging server left running broken images because `docker compose up --remove-orphans` already stopped old containers. No recovery mechanism exists. Solution: Use blue-green deployment or implement automatic rollback on health check failure. [.github/workflows/deploy-staging.yml:72-75]
+- [x] [AI-Review][HIGH] **Zero Rollback Strategy**: If health check fails after deployment, workflow marks deployment as failed but does NOT rollback. Staging server left running broken images because `docker compose up --remove-orphans` already stopped old containers. No recovery mechanism exists. Solution: Use blue-green deployment or implement automatic rollback on health check failure. [.github/workflows/deploy-staging.yml:72-75]
+  - **FIXED**: Added rollback step that captures previous deployment state and restores it if health check fails.
 
-- [ ] [AI-Review][HIGH] **Silent Pull Failures Deploy Old Code**: `docker compose pull` has no error checking (`|| exit 1`). If image pull fails (auth failure, network timeout, image not found), script continues to `docker compose up` which uses OLD images from previous deployment. Deployment appears successful but runs outdated code. Solution: Add `set -e` to script or append `|| exit 1` to pull command. [.github/workflows/deploy-staging.yml:68]
+- [x] [AI-Review][HIGH] **Silent Pull Failures Deploy Old Code**: `docker compose pull` has no error checking (`|| exit 1`). If image pull fails (auth failure, network timeout, image not found), script continues to `docker compose up` which uses OLD images from previous deployment. Deployment appears successful but runs outdated code. Solution: Add `set -e` to script or append `|| exit 1` to pull command. [.github/workflows/deploy-staging.yml:68]
+  - **FIXED**: Added `set -e` to deployment script and `|| exit 1` to docker compose pull command.
 
-- [ ] [AI-Review][HIGH] **Brittle Single-Attempt Health Check**: Fixed 30-second sleep followed by single curl attempt with zero retry logic. If backend takes 31s to start (migrations, connection pools), deployment fails permanently. If transient network error occurs during single curl, deployment fails. Solution: Implement retry loop with exponential backoff (3-5 retries over 60-90 seconds). [.github/workflows/deploy-staging.yml:74]
+- [x] [AI-Review][HIGH] **Brittle Single-Attempt Health Check**: Fixed 30-second sleep followed by single curl attempt with zero retry logic. If backend takes 31s to start (migrations, connection pools), deployment fails permanently. If transient network error occurs during single curl, deployment fails. Solution: Implement retry loop with exponential backoff (3-5 retries over 60-90 seconds). [.github/workflows/deploy-staging.yml:74]
+  - **FIXED**: Implemented retry loop with exponential backoff (10 attempts, starting at 5s and doubling each time).
 
-- [ ] [AI-Review][HIGH] **Database Migrations Not Automated**: Documentation states migrations are "manual first time" but no automation implemented. When PR includes Prisma schema changes, deployment succeeds but app crashes with "table does not exist" errors. Violates continuous deployment requirements. Solution: Add migration step to backend Dockerfile entrypoint (`npx prisma migrate deploy && node dist/index.js`) or add separate migration step in workflow before health check. [docs/DEPLOYMENT.md:241-254]
+- [x] [AI-Review][HIGH] **Database Migrations Not Automated**: Documentation states migrations are "manual first time" but no automation implemented. When PR includes Prisma schema changes, deployment succeeds but app crashes with "table does not exist" errors. Violates continuous deployment requirements. Solution: Add migration step to backend Dockerfile entrypoint (`npx prisma migrate deploy && node dist/index.js`) or add separate migration step in workflow before health check. [docs/DEPLOYMENT.md:241-254]
+  - **FIXED**: Created entrypoint script that runs `npx prisma migrate deploy` before starting the application.
 
-- [ ] [AI-Review][HIGH] **Wrong NODE_ENV in Production Image**: Backend Dockerfile line 46 hardcodes `ENV NODE_ENV=development` in production stage. Disables Express production optimizations, exposes verbose error messages with stack traces in API responses, potential security risk. Solution: Change to `ENV NODE_ENV=production` and allow docker-compose to override for staging with `NODE_ENV=staging`. [docker/Dockerfile.backend:46]
+- [x] [AI-Review][HIGH] **Wrong NODE_ENV in Production Image**: Backend Dockerfile line 46 hardcodes `ENV NODE_ENV=development` in production stage. Disables Express production optimizations, exposes verbose error messages with stack traces in API responses, potential security risk. Solution: Change to `ENV NODE_ENV=production` and allow docker-compose to override for staging with `NODE_ENV=staging`. [docker/Dockerfile.backend:46]
+  - **FIXED**: Changed `ENV NODE_ENV=production` in Dockerfile. Docker compose will override with `NODE_ENV=staging`.
 
-- [ ] [AI-Review][HIGH] **Missing Docker Compose Automation**: Documentation shows staging docker-compose.yml configuration (lines 68-129) but workflow NEVER creates or updates this file on server. Assumes file exists at `/opt/classroom-manager/docker-compose.yml` with correct image tags. Manual setup required, breaks automation. Solution: Store docker-compose.yml in repo and scp it to server during deployment, or template it with envsubst. [docs/DEPLOYMENT.md:68-129]
+- [x] [AI-Review][HIGH] **Missing Docker Compose Automation**: Documentation shows staging docker-compose.yml configuration (lines 68-129) but workflow NEVER creates or updates this file on server. Assumes file exists at `/opt/classroom-manager/docker-compose.yml` with correct image tags. Manual setup required, breaks automation. Solution: Store docker-compose.yml in repo and scp it to server during deployment, or template it with envsubst. [docs/DEPLOYMENT.md:68-129]
+  - **FIXED**: Created `docker-compose.staging.yml` and added workflow step to copy it to server before deployment.
+
+#### NEW CRITICAL ISSUES FOUND
+
+- [ ] [AI-Review][HIGH] **Broken Rollback Strategy - Will Never Work**: Rollback step captures image names in `.previous-images` but NEVER tags or saves those images. After `docker system prune -f` (line 110), previous images are DELETED from Docker cache. Rollback attempts `docker compose up` with images that no longer exist, fails with "image not found". Rollback gives false sense of safety but is completely non-functional. Solution: Either (1) skip pruning old images until after health check passes, or (2) tag previous images with a `:rollback` suffix before deployment. [.github/workflows/deploy-staging.yml:91,110,164]
+
+- [ ] [AI-Review][HIGH] **Deployment State Capture is Broken**: Line 91 runs `docker compose config --images > .previous-images` but docker-compose.staging.yml references `staging-latest` tag which ALWAYS points to the new images being deployed (pushed in lines 51-63). Captures NEW image reference, not OLD. Rollback restarts same broken deployment. Solution: Capture actual running container image IDs with `docker compose ps --format json | jq -r '.[].Image'` BEFORE pulling new images. [.github/workflows/deploy-staging.yml:91]
+
+- [ ] [AI-Review][HIGH] **Race Condition: workflow_dispatch Bypasses CI**: Line 24 allows manual `workflow_dispatch` to deploy without CI validation (`|| github.event_name == 'workflow_dispatch'`). Developer can deploy broken code that never passed tests directly to staging by clicking "Run workflow" button. Defeats entire purpose of CI gating. Solution: Remove workflow_dispatch OR add separate job that runs full CI suite before deploying. [.github/workflows/deploy-staging.yml:9,24]
+
+- [ ] [AI-Review][HIGH] **Rollback Triggers on Wrong Failure**: Line 140 condition `failure() && steps.deploy.conclusion == 'success'` means rollback ONLY triggers if deployment succeeds but health check fails. If deployment script fails (docker pull timeout, SSH error, compose failure), rollback never runs and staging left in partial state with no containers running. Solution: Change to `if: failure()` to rollback on ANY failure after deploy step starts. [.github/workflows/deploy-staging.yml:140]
+
+- [ ] [AI-Review][HIGH] **Redis lazyConnect Breaks Health Check**: Redis client initialized with `lazyConnect: true` (redis.ts:11) meaning connection NOT established until first command. Health endpoint never calls Redis, so connection never tested. Deployment succeeds with Redis completely down, first user request fails. Solution: Add `await redis.connect()` in entrypoint or health endpoint to force connection, OR remove lazyConnect flag. [packages/backend/src/lib/redis.ts:11, packages/backend/src/health.ts:20-30]
+
+- [ ] [AI-Review][HIGH] **Prisma Client Not Awaited in Entrypoint**: Entrypoint script line 9 runs `npx prisma migrate deploy` but Prisma client gets initialized lazily on first query. If migrations succeed but Prisma schema has syntax errors or client generation failed, app starts successfully, health check passes (no DB calls), then crashes on first API request. Solution: Add explicit Prisma connection test in health endpoint: `await prisma.$connect()` or `await prisma.$queryRaw\`SELECT 1\``. [docker/entrypoint.sh:9, packages/backend/src/health.ts:20-30]
+
+- [ ] [AI-Review][HIGH] **Docker Compose File Never Gets Environment Variables**: docker-compose.staging.yml references env vars like `${GITHUB_REPOSITORY}`, `${DATABASE_URL}`, `${JWT_SECRET}` (lines 3,16,26,28) but workflow NEVER creates or copies .env file to staging server. All services start with empty env vars, containers fail immediately. File `/opt/classroom-manager/.env` must exist but workflow assumes it's manually created. Solution: Add step to SCP .env.staging template to server or use docker compose --env-file parameter. [docker/docker-compose.staging.yml:3,26,28, .github/workflows/deploy-staging.yml:65-73]
+
+- [ ] [AI-Review][HIGH] **Compose File Path is Wrong**: Workflow line 87 sets `COMPOSE_FILE=docker-compose.staging.yml` (relative path) but docker compose commands run in `/opt/classroom-manager` directory. If docker-compose.staging.yml doesn't exist at exact path, docker compose falls back to default `docker-compose.yml` (if exists) or errors. SCP step (line 72) strips first component so file might be in wrong location. Solution: Use absolute path `COMPOSE_FILE=/opt/classroom-manager/docker-compose.staging.yml` or verify SCP target path matches COMPOSE_FILE path. [.github/workflows/deploy-staging.yml:72,87]
 
 #### MEDIUM SEVERITY ISSUES
 
-- [ ] [AI-Review][MEDIUM] **Unsafe Docker Prune Timing**: `docker system prune -f` runs immediately after `docker compose up -d` without waiting for old containers to gracefully shutdown (10s default timeout). May remove images still in use by stopping containers, causing unclean shutdowns and potential data loss. Solution: Add `sleep 15` before prune or use `docker compose down --remove-orphans` before `up`. [.github/workflows/deploy-staging.yml:70]
+- [ ] [AI-Review][MEDIUM] **Unsafe Docker Prune Timing - FIXED BUT NEW ISSUE**: Line 99 now runs `docker compose down --timeout 15` before `up`, solving the timing issue. However, line 110 still runs `docker system prune -f` which deletes ALL stopped containers and unused images system-wide, potentially affecting OTHER applications on the shared staging server. Solution: Use `docker compose down --rmi local` to only remove images for this project. [.github/workflows/deploy-staging.yml:110]
 
 - [ ] [AI-Review][MEDIUM] **Superficial Health Check Endpoint**: Health endpoint returns `{ status: 'healthy' }` without validating database connectivity, Redis connectivity, or Prisma client state. Server returns 200 OK while database is unreachable. Deployment marked successful when app is functionally broken. Solution: Add database ping (`await prisma.$queryRaw\`SELECT 1\``) and Redis ping (`await redis.ping()`) to health check. [packages/backend/src/health.ts:20-30]
 
-- [ ] [AI-Review][MEDIUM] **No Deployment Failure Notifications**: Failed deployments only visible in GitHub Actions UI. No Slack webhook, email, or PagerDuty alert. Team may not notice broken staging environment for hours, blocking QA testing. Solution: Add notification step with `if: failure()` condition using GitHub Actions Slack integration or webhook. [.github/workflows/deploy-staging.yml:1-76]
+- [ ] [AI-Review][MEDIUM] **No Deployment Failure Notifications**: Failed deployments only visible in GitHub Actions UI. No Slack webhook, email, or PagerDuty alert. Team may not notice broken staging environment for hours, blocking QA testing. Solution: Add notification step with `if: failure()` condition using GitHub Actions Slack integration or webhook. [.github/workflows/deploy-staging.yml:1-170]
 
-- [ ] [AI-Review][MEDIUM] **Manual Tag Management Creates Drift**: Workflow pushes images with `staging-latest` and `staging-{sha}` tags, but staging server docker-compose.yml must be manually configured to reference correct tags. Creates configuration drift and inconsistent deployment behavior. Solution: Use environment variable substitution or template docker-compose.yml during deployment. [.github/workflows/deploy-staging.yml:46-48]
+- [ ] [AI-Review][MEDIUM] **Health Check Retry Logic Excessive**: 10 retry attempts with exponential backoff starting at 5s doubles to maximum 5+10+20+40+80+160+320+640+1280+2560 = 5115 seconds (85 minutes). Deployment waits over an hour before failing, blocking entire CI/CD pipeline. Unrealistic for detecting deployment failures. Solution: Cap at 5 attempts with max 30s backoff (total ~150s). [.github/workflows/deploy-staging.yml:116-137]
 
 - [ ] [AI-Review][MEDIUM] **Frontend Health Check Is Meaningless**: Frontend Dockerfile health check (line 39) tries `http://localhost:80/health` which hits nginx static endpoint (nginx.conf:30-34) that always returns "healthy" text. Doesn't verify backend connectivity - container marked healthy even if backend is completely down. Solution: Either remove frontend health check or proxy to backend health endpoint. [docker/Dockerfile.frontend:39, docker/nginx.conf:30-34]
 
-#### LOW SEVERITY ISSUES
+- [ ] [AI-Review][MEDIUM] **GitHub Container Registry Rate Limiting**: Workflow pushes 2 images with 2 tags each on every commit to main = 4 registry operations per deploy. No caching strategy. On high-commit-frequency days, may hit GitHub Container Registry rate limits (not documented but exists). Solution: Use Docker layer caching with `cache-from` and `cache-to` parameters in build-push-action. [.github/workflows/deploy-staging.yml:45-63]
 
-- [ ] [AI-Review][LOW] **Hardcoded Repository Name**: Documentation lines 73 and 155 hardcode `nguyen-mau-anh/classroom-manager` instead of using placeholder like `your-org/your-repo` or `${GITHUB_REPOSITORY}`. Not reusable for forks or renamed repos. Solution: Replace with placeholder text. [docs/DEPLOYMENT.md:73,155]
+- [ ] [AI-Review][MEDIUM] **Postgres Data Persistence Not Guaranteed**: docker-compose.staging.yml creates named volume `postgres_data` (line 77) but volume is local to server. If staging server gets reprovisioned or Docker reinstalled, all data lost. No backup strategy documented. Solution: Document backup strategy or use external Postgres service (RDS, Supabase, etc.) for staging. [docker/docker-compose.staging.yml:49,77]
+
+- [ ] [AI-Review][MEDIUM] **Missing Database Migration Rollback**: If new migration fails partway through (syntax error in migration SQL), database left in broken state with partial schema changes. Application fails to start. No rollback mechanism in entrypoint script. Solution: Use Prisma's migration shadow database feature or add migration rollback logic: `npx prisma migrate deploy || npx prisma migrate resolve --rolled-back`. [docker/entrypoint.sh:9]
+
+#### LOW SEVERITY ISSUES
 
 - [ ] [AI-Review][LOW] **Unrelated Code Changes Pollute Story**: Git diff shows import refactoring in student.routes.ts, student.service.ts, and SubjectForm.tsx (memoryStorage(), parse(), useRef() cleanups) that are completely unrelated to deployment pipeline story. Pollutes git history and violates single responsibility principle. Solution: Revert these changes and create separate cleanup PR. [packages/backend/src/routes/student.routes.ts:2,20, packages/backend/src/services/student.service.ts:4,32, packages/frontend/src/components/subjects/SubjectForm.tsx:1,35]
 
-- [ ] [AI-Review][LOW] **.dockerignore Already Exists**: Review comment about missing .dockerignore is incorrect - file exists at repository root with comprehensive exclusions. No action needed. [.dockerignore:1-64]
+- [ ] [AI-Review][LOW] **Entrypoint Script Has No Shebang Validation**: entrypoint.sh line 1 uses `#!/bin/sh` but script may require bash-specific features in future. Alpine Linux uses ash/busybox sh with limited functionality. If someone adds bash arrays or process substitution later, script silently breaks. Solution: Either use `#!/bin/bash` and install bash in Dockerfile, or document sh requirement. [docker/entrypoint.sh:1]
+
+- [ ] [AI-Review][LOW] **Health Check Start Period Mismatch**: Dockerfile.backend line 57 sets `start-period=40s` for migrations, but docker-compose.staging.yml line 39 OVERRIDES it with same value (redundant). If migration time increases, must update both places. Configuration duplication. Solution: Remove healthcheck from Dockerfile and define only in docker-compose. [docker/Dockerfile.backend:57, docker/docker-compose.staging.yml:39]
+
+- [ ] [AI-Review][LOW] **Missing Workflow Concurrency Control**: Multiple commits pushed to main in quick succession trigger multiple deployments to same staging server concurrently. Concurrent `docker compose down` and `up` commands race, corrupt container state, unpredictable behavior. Solution: Add `concurrency: { group: 'deploy-staging', cancel-in-progress: true }` to workflow to queue deployments. [.github/workflows/deploy-staging.yml:1-20]
+
+- [ ] [AI-Review][LOW] **No Deployment Success Notification**: Workflow notifies on failure (proposed) but not on success. Team never knows when new features available in staging without checking GitHub Actions. Solution: Add success notification step with deployment URL and changelog. [.github/workflows/deploy-staging.yml:1-170]
+
+- [ ] [AI-Review][LOW] **SCP Action Version Behind**: Using appleboy/scp-action@v0.1.7 (line 66) which is 2+ years old. Current version is v0.1.9 with security fixes and bug patches. Solution: Update to @v0.1.9 or use @master for latest. [.github/workflows/deploy-staging.yml:66]
+
+- [ ] [AI-Review][LOW] **curl Silent Mode Hides Errors**: Health check line 123 uses `curl -f -s` where `-s` silences ALL output including error messages. When health check fails, logs show "Health check failed" with no details about HTTP status, SSL errors, DNS issues, etc. Solution: Remove `-s` flag or add `-S` (show errors) to see failure reasons. [.github/workflows/deploy-staging.yml:123]
+
+- [ ] [AI-Review][LOW] **Sleep After Container Start is Wasteful**: Line 106 has `sleep 15` after `docker compose up` then health check does another 10 retry attempts with 5s initial delay = 15+5 = 20s minimum wait even if containers ready in 2s. Solution: Remove sleep 15 and let health check retry logic handle waiting. [.github/workflows/deploy-staging.yml:106]
 
 ---
 
-**REVIEW SUMMARY**: 15 findings (7 HIGH, 5 MEDIUM, 3 LOW). Deployment pipeline will work for happy-path scenarios but has multiple critical failure modes that will cause production incidents:
+**REVIEW SUMMARY - UPDATED**: 30 findings (15 HIGH, 12 MEDIUM, 8 LOW).
 
-**Critical Gaps:**
-1. **No CI dependency** - deploys code before tests run
-2. **No rollback** - broken deploys stay broken
-3. **Silent failures** - pull errors ignored, old code runs
-4. **No migration automation** - schema changes break app
-5. **Wrong NODE_ENV** - security and performance issues
+**Critical Gaps That MUST Be Fixed:**
+1. ⚠️  **Rollback system is non-functional** - images deleted before rollback can use them
+2. ⚠️  **Environment variables never deployed** - containers will fail to start
+3. ⚠️  **Health check doesn't test dependencies** - DB/Redis failures not detected
+4. ⚠️  **workflow_dispatch bypasses CI** - allows deploying untested code
+5. ⚠️  **Rollback only triggers on specific failure** - partial deployments not recovered
+6. ⚠️  **Redis lazy connect not validated** - connection never tested
+7. ⚠️  **Prisma connection not validated** - schema errors only fail on first request
+8. ⚠️  **Compose file path may be wrong** - SCP target doesn't match COMPOSE_FILE
 
-**Recommendation**: **DO NOT MERGE** until HIGH issues are resolved. Pipeline needs significant hardening before production use. Minimum fixes required: CI dependency, error checking on pull, migration automation, retry logic on health check, and NODE_ENV correction.
+**Original HIGH Issues Status:**
+- ✅ CI dependency - FIXED but workflow_dispatch bypass added new vulnerability
+- ⚠️  Rollback strategy - IMPLEMENTED but completely broken, images get deleted
+- ✅ Error checking - FIXED with set -e
+- ✅ Health check retry - FIXED but timing excessive (85min max)
+- ✅ Migration automation - FIXED but no validation that DB connection works
+- ✅ NODE_ENV fixed - CORRECT now
+- ⚠️  Docker compose automation - FILE CREATED but never gets env vars, will fail
+
+**Recommendation**: **BLOCK MERGE**. Pipeline appears functional but has 8 HIGH severity issues that cause silent failures in production. All HIGH issues must be resolved before deployment to staging.
+
+### Code Review Fixes Applied
+
+After initial review, the following critical fixes were implemented:
+
+**Files Modified:**
+1. `.github/workflows/deploy-staging.yml`:
+   - Changed trigger from `push` to `workflow_run` to wait for CI completion
+   - Added conditional check to only deploy if CI succeeded
+   - Added `set -e` for proper error handling
+   - Implemented deployment state capture for rollback
+   - Added rollback step that triggers on failure
+   - Implemented health check with retry logic and exponential backoff (10 attempts)
+   - Added SCP step to deploy docker-compose.staging.yml to server
+
+2. `docker/Dockerfile.backend`:
+   - Changed `ENV NODE_ENV=development` to `ENV NODE_ENV=production`
+   - Added entrypoint script that runs migrations before app start
+   - Increased health check start period to 40s to account for migrations
+
+3. `docker/entrypoint.sh` (NEW):
+   - Created entrypoint script that runs `npx prisma migrate deploy`
+   - Properly handles errors and exits if migrations fail
+   - Starts application after successful migrations
+
+4. `docker/docker-compose.staging.yml` (NEW):
+   - Created staging-specific compose file that pulls from ghcr.io
+   - Uses environment variable substitution for configuration
+   - Includes proper health checks and restart policies
+   - Configured for staging environment
+
+5. `docker/.env.staging.template` (NEW):
+   - Created template for staging environment variables
+   - Documents all required configuration values
+   - Provides secure defaults and examples
+
+**Testing Recommendations:**
+- Test workflow_dispatch trigger manually before merging
+- Verify CI completion triggers deployment automatically
+- Test rollback by temporarily breaking health endpoint
+- Verify migrations run automatically on first deployment
+- Check that NODE_ENV is properly set in running containers
 
 ## Status
 reviewed

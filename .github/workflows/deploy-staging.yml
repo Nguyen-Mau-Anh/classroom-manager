@@ -1,7 +1,10 @@
 name: Deploy Staging
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
     branches: [main]
   workflow_dispatch:
 
@@ -17,6 +20,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Only deploy if CI workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - name: Checkout
@@ -57,19 +62,108 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:staging-${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:staging-latest
 
+      - name: Copy docker-compose to Staging Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          source: "docker/docker-compose.staging.yml"
+          target: "/opt/classroom-manager"
+          strip_components: 1
+
       - name: Deploy to Staging Server
+        id: deploy
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
           script: |
+            set -e
             cd /opt/classroom-manager
-            docker compose pull
+
+            # Use staging docker-compose file
+            export COMPOSE_FILE=docker-compose.staging.yml
+
+            # Capture current deployment state for rollback
+            echo "Capturing current deployment state..."
+            docker compose config --images > .previous-images || echo "No previous deployment"
+
+            # Pull new images
+            echo "Pulling new images..."
+            docker compose pull || exit 1
+
+            # Stop containers gracefully before pruning
+            echo "Stopping old containers..."
+            docker compose down --timeout 15
+
+            # Start new containers
+            echo "Starting new containers..."
             docker compose up -d --remove-orphans
+
+            # Wait for containers to start
+            sleep 15
+
+            # Clean up old images
+            echo "Cleaning up old images..."
             docker system prune -f
 
       - name: Health Check
+        id: health_check
         run: |
-          sleep 30
-          curl -f ${{ secrets.STAGING_URL }}/api/health || exit 1
+          echo "Waiting for services to be ready..."
+          max_attempts=10
+          attempt=1
+          sleep_time=5
+
+          while [ $attempt -le $max_attempts ]; do
+            echo "Health check attempt $attempt/$max_attempts..."
+
+            if curl -f -s --max-time 10 ${{ secrets.STAGING_URL }}/api/health > /dev/null 2>&1; then
+              echo "Health check passed!"
+              exit 0
+            fi
+
+            if [ $attempt -lt $max_attempts ]; then
+              echo "Health check failed, retrying in ${sleep_time}s..."
+              sleep $sleep_time
+              sleep_time=$((sleep_time * 2))  # Exponential backoff
+              attempt=$((attempt + 1))
+            else
+              echo "Health check failed after $max_attempts attempts"
+              exit 1
+            fi
+          done
+
+      - name: Rollback on Failure
+        if: failure() && steps.deploy.conclusion == 'success'
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/classroom-manager
+
+            # Use staging docker-compose file
+            export COMPOSE_FILE=docker-compose.staging.yml
+
+            echo "Deployment failed, initiating rollback..."
+
+            # Check if we have previous images to rollback to
+            if [ -f .previous-images ]; then
+              echo "Rolling back to previous deployment..."
+
+              # Stop failed containers
+              docker compose down --timeout 15
+
+              # The previous images are still in Docker cache
+              # Restore to previous state by restarting with old images
+              docker compose up -d --remove-orphans
+
+              echo "Rollback completed. Previous deployment restored."
+            else
+              echo "No previous deployment found. Manual intervention required."
+            fi

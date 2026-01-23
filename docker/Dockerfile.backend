@@ -42,16 +42,20 @@ COPY --from=builder /app/packages/backend/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/backend/node_modules ./packages/backend/node_modules
 
+# Copy entrypoint script
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Set default environment variables (can be overridden by docker-compose)
-ENV NODE_ENV=development
+ENV NODE_ENV=production
 ENV PORT=4000
 
 # Expose port
 EXPOSE 4000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Health check - increased start period for migrations
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/health || exit 1
 
-# Start the server (entry point exports all modules)
-CMD ["node", "dist/index.js"]
+# Use entrypoint script that runs migrations before starting server
+ENTRYPOINT ["/entrypoint.sh"]
