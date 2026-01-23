@@ -1,0 +1,69 @@
+metadata:
+  version: 1.0.0
+  total_lessons: 2
+  created: '2026-01-23T16:59:10.471781'
+  last_updated: '2026-01-23T17:02:15.265975'
+lessons:
+  typecheck-unknown-001:
+    id: typecheck-unknown-001
+    date: '2026-01-23'
+    story_id: null
+    stage: typecheck
+    error_type: unknown
+    error_pattern: '> classroom-manager@0.1.0 typecheck'
+    error_message: '> classroom-manager@0.1.0 typecheck
+
+      > pnpm -r typecheck
+
+
+      Scope: 3 of 4 workspace projects
+
+      packages/shared typecheck$ tsc --noEmit
+
+      packages/shared typecheck: Done
+
+      packages/backend typecheck$ tsc --noEmit
+
+      packages/frontend typecheck$ tsc --noEmit
+
+      packages/frontend typecheck: src/components/subjects/SubjectForm.test.tsx(128,28):
+      error TS2339: Property ''checked'' does not exist on type ''HTMLElement''.
+
+      packages/frontend typecheck: src/components/subjects/SubjectForm.test.tsx(131,28):
+      error TS2339: Prop'
+    context:
+      command: npm run typecheck
+    fix:
+      description: Fix applied after 1 retries
+      action: fix_agent_applied
+    success: true
+    times_encountered: 1
+    times_prevented: 0
+    last_encountered: '2026-01-23'
+  unit-test-unknown-001:
+    id: unit-test-unknown-001
+    date: '2026-01-23'
+    story_id: null
+    stage: unit-test
+    error_type: unknown
+    error_pattern: '> classroom-manager@0.1.0 test'
+    error_message: '> classroom-manager@0.1.0 test
+
+      > jest
+
+
+      {"level":30,"time":1769162351984,"env":"test","request":{"method":"POST","url":"/api/auth/login","query":{},"params":{}},"response":{"statusCode":200},"duration":83,"msg":"POST
+      /login 200"}
+
+      {"level":40,"time":1769162352058,"env":"test","err":{"type":"AppError","message":"Invalid
+      email or password","stack":"AppError: Invalid email or password\n    at AppError.invalidCredentials
+      (/Users/anhnm/dev/03.Claude/worktrees/story-12-99s/packages/backend/src/errors/ap'
+    context:
+      command: npm test
+    fix:
+      description: Fix applied after 1 retries
+      action: fix_agent_applied
+    success: true
+    times_encountered: 1
+    times_prevented: 0
+    last_encountered: '2026-01-23'
