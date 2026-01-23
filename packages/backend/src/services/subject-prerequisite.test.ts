@@ -247,7 +247,6 @@ describe('Subject Prerequisite Chain Queries', () => {
       };
 
       // Mock BIOL101 being a prerequisite of BIOL201
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       prismaMock.subject.findUnique.mockResolvedValueOnce({
         ...mockBiol101,
         prerequisiteOf: [
@@ -262,6 +261,7 @@ describe('Subject Prerequisite Chain Queries', () => {
             updatedAt: mockBiol201.updatedAt,
           },
         ],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
 
       const result = await prismaMock.subject.findUnique({

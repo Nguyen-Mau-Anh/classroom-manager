@@ -1,4 +1,4 @@
-import express, { Express } from 'express';
+import express, { Express, json } from 'express';
 import request from 'supertest';
 
 import { errorHandler } from '../middlewares/error-handler.middleware';
@@ -39,7 +39,7 @@ describe('Subject Routes - Authentication and Authorization', () => {
 
   beforeAll(() => {
     app = express();
-    app.use(express.json());
+    app.use(json());
     app.use('/api/subjects', subjectRoutes);
     app.use(errorHandler);
   });

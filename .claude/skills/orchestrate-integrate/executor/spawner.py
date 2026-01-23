@@ -149,6 +149,16 @@ class ClaudeSpawner:
                 "errors": kwargs.get("errors", "{errors}"),
                 "files_changed": kwargs.get("files_changed", "{files_changed}"),
                 "known_issues": kwargs.get("known_issues", ""),  # Default to empty
+                "commit_type": kwargs.get("commit_type", "feat"),  # Default to feat
+                "story_title": kwargs.get("story_title", ""),
+                "changes_summary": kwargs.get("changes_summary", ""),
+                "pr_number": kwargs.get("pr_number", ""),
+                "pr_url": kwargs.get("pr_url", ""),
+                "ci_logs": kwargs.get("ci_logs", ""),
+                "branch_prefix": kwargs.get("branch_prefix", self.config.git_settings.branch_prefix if self.config else "feat/"),
+                "base_branch": kwargs.get("base_branch", self.config.git_settings.base_branch if self.config else "main"),
+                "auto_merge": kwargs.get("auto_merge", self.config.pr_settings.auto_merge if self.config else False),
+                "merge_method": kwargs.get("merge_method", self.config.pr_settings.merge_method if self.config else "squash"),
             }
             return prompt.format(**kwargs_with_defaults).strip()
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 import { Subject, CreateSubjectInput, UpdateSubjectInput } from '../../services/api/subjects';
 
@@ -32,7 +32,7 @@ export const SubjectForm: React.FC<SubjectFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Reset form data when subject changes
-  const prevSubjectIdRef = React.useRef<string | undefined>(subject?.id);
+  const prevSubjectIdRef = useRef<string | undefined>(subject?.id);
   if (prevSubjectIdRef.current !== subject?.id) {
     prevSubjectIdRef.current = subject?.id;
     setFormData(getInitialFormData());

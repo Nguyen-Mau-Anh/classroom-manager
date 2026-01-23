@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 
 import { Prisma } from '@prisma/client';
-import Papa from 'papaparse';
+import Papa, { parse } from 'papaparse';
 
 import { AppError } from '../errors/app-error';
 import { prisma } from '../lib/prisma';
@@ -29,7 +29,7 @@ function generatePassword(): string {
  */
 function parseCSV(buffer: Buffer): Papa.ParseResult<Record<string, string>> {
   const csvText = buffer.toString('utf-8');
-  return Papa.parse(csvText, {
+  return parse(csvText, {
     header: true,
     skipEmptyLines: true,
     transformHeader: (header) => header.trim(),

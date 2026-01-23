@@ -589,10 +589,10 @@ describe('SubjectService', () => {
       prismaMock.$transaction.mockImplementation((callback: any) => callback(prismaMock));
       prismaMock.teacherQualification.deleteMany.mockResolvedValue({ count: 0 });
       prismaMock.teacherQualification.createMany.mockResolvedValue({ count: 2 });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       prismaMock.subject.findUnique.mockResolvedValueOnce({
         ...existingSubject,
         qualifications: mockQualifications,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
 
       const result = await subjectService.updateQualifiedTeachers(subjectId, teacherIds);

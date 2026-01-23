@@ -1,5 +1,5 @@
 import { Router, IRouter } from 'express';
-import multer from 'multer';
+import multer, { memoryStorage } from 'multer';
 
 import { studentController } from '../controllers/student.controller';
 import { authenticate, authorize } from '../middlewares/auth.middleware';
@@ -17,7 +17,7 @@ const router: IRouter = Router();
 
 // Configure multer for CSV file uploads
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: memoryStorage(),
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
