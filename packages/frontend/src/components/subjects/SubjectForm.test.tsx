@@ -124,47 +124,47 @@ describe('SubjectForm', () => {
   it('toggles mandatory switch', () => {
     render(<SubjectForm {...defaultProps} />);
 
-    const mandatoryToggle = screen.getByLabelText(/Mandatory/i) as HTMLInputElement;
-    expect(mandatoryToggle.checked).toBe(false);
+    const mandatoryToggle = screen.getByLabelText(/Mandatory/i);
+    expect(mandatoryToggle).not.toBeChecked();
 
     fireEvent.click(mandatoryToggle);
-    expect(mandatoryToggle.checked).toBe(true);
+    expect(mandatoryToggle).toBeChecked();
 
     fireEvent.click(mandatoryToggle);
-    expect(mandatoryToggle.checked).toBe(false);
+    expect(mandatoryToggle).not.toBeChecked();
   });
 
   it('allows selecting prerequisites from multi-select', () => {
     render(<SubjectForm {...defaultProps} />);
 
-    const prerequisiteCheckbox = screen.getByLabelText(/Mathematics I \(MATH101\)/i) as HTMLInputElement;
+    const prerequisiteCheckbox = screen.getByLabelText(/Mathematics I \(MATH101\)/i);
 
-    expect(prerequisiteCheckbox.checked).toBe(false);
+    expect(prerequisiteCheckbox).not.toBeChecked();
     fireEvent.click(prerequisiteCheckbox);
-    expect(prerequisiteCheckbox.checked).toBe(true);
+    expect(prerequisiteCheckbox).toBeChecked();
   });
 
   it('allows selecting multiple prerequisites', () => {
     render(<SubjectForm {...defaultProps} />);
 
-    const math101Checkbox = screen.getByLabelText(/Mathematics I \(MATH101\)/i) as HTMLInputElement;
-    const phys101Checkbox = screen.getByLabelText(/Physics I \(PHYS101\)/i) as HTMLInputElement;
+    const math101Checkbox = screen.getByLabelText(/Mathematics I \(MATH101\)/i);
+    const phys101Checkbox = screen.getByLabelText(/Physics I \(PHYS101\)/i);
 
     fireEvent.click(math101Checkbox);
     fireEvent.click(phys101Checkbox);
 
-    expect(math101Checkbox.checked).toBe(true);
-    expect(phys101Checkbox.checked).toBe(true);
+    expect(math101Checkbox).toBeChecked();
+    expect(phys101Checkbox).toBeChecked();
   });
 
   it('allows selecting qualified teachers from multi-select', () => {
     render(<SubjectForm {...defaultProps} />);
 
-    const teacherCheckbox = screen.getByLabelText(/Dr\. Tuan Nguyen/i) as HTMLInputElement;
+    const teacherCheckbox = screen.getByLabelText(/Dr\. Tuan Nguyen/i);
 
-    expect(teacherCheckbox.checked).toBe(false);
+    expect(teacherCheckbox).not.toBeChecked();
     fireEvent.click(teacherCheckbox);
-    expect(teacherCheckbox.checked).toBe(true);
+    expect(teacherCheckbox).toBeChecked();
   });
 
   it('pre-fills form fields in edit mode', () => {
@@ -189,15 +189,15 @@ describe('SubjectForm', () => {
     expect(screen.getByLabelText(/Name/i)).toHaveValue('Advanced Biology');
     expect(screen.getByLabelText(/Code/i)).toHaveValue('BIOL301');
     expect(screen.getByLabelText(/Description/i)).toHaveValue('Advanced topics');
-    expect((screen.getByLabelText(/Mandatory/i) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByLabelText(/Mandatory/i)).toBeChecked();
 
     // Check prerequisites are pre-selected
-    const math101Checkbox = screen.getByLabelText(/Mathematics I \(MATH101\)/i) as HTMLInputElement;
-    expect(math101Checkbox.checked).toBe(true);
+    const math101Checkbox = screen.getByLabelText(/Mathematics I \(MATH101\)/i);
+    expect(math101Checkbox).toBeChecked();
 
     // Check qualified teachers are pre-selected
-    const teacherCheckbox = screen.getByLabelText(/Dr\. Tuan Nguyen/i) as HTMLInputElement;
-    expect(teacherCheckbox.checked).toBe(true);
+    const teacherCheckbox = screen.getByLabelText(/Dr\. Tuan Nguyen/i);
+    expect(teacherCheckbox).toBeChecked();
   });
 
   it('calls onCancel when cancel button is clicked', () => {

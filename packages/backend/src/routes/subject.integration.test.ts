@@ -758,7 +758,8 @@ describe('Subject API Integration Tests', () => {
       const result = await enrollmentService.validatePrerequisites('student-1', 'subject-2');
 
       expect(result.eligible).toBe(true);
-      expect(enrollmentService.validatePrerequisites).toHaveBeenCalledWith(
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(jest.mocked(enrollmentService).validatePrerequisites).toHaveBeenCalledWith(
         'student-1',
         'subject-2',
       );
