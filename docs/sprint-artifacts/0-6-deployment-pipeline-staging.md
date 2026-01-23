@@ -574,45 +574,54 @@ Created complete GitHub Actions deployment pipeline for staging environment:
 
 ### Review Follow-ups (AI)
 
-#### CRITICAL ISSUES - Must Fix Before Production
+#### CRITICAL ISSUES - Must Fix Before Merge
 
-- [ ] [AI-Review][HIGH] **Race Condition**: Deploy workflow triggers on push to main WITHOUT waiting for CI to pass - broken code with failing tests gets deployed to staging before test results are known. No `needs: [build]` dependency or `workflow_run` trigger exists. [.github/workflows/deploy-staging.yml:4-6]
+- [ ] [AI-Review][HIGH] **Race Condition: Deploy Races CI Pipeline**: Deploy workflow triggers on push to main WITHOUT waiting for CI to pass. Broken code with failing tests gets deployed to staging before test results are known. No `needs: [build]` dependency or `workflow_run` trigger exists. Solution: Add `needs: [build]` to deploy job or use `workflow_run` trigger after CI completion. [.github/workflows/deploy-staging.yml:4-6]
 
-- [ ] [AI-Review][HIGH] **Zero Rollback Strategy**: If health check fails after deployment, workflow marks deployment as failed but does NOT rollback. Staging server left running broken images because `docker compose up --remove-orphans` already stopped old containers. No recovery mechanism. [.github/workflows/deploy-staging.yml:72-75]
+- [ ] [AI-Review][HIGH] **Zero Rollback Strategy**: If health check fails after deployment, workflow marks deployment as failed but does NOT rollback. Staging server left running broken images because `docker compose up --remove-orphans` already stopped old containers. No recovery mechanism exists. Solution: Use blue-green deployment or implement automatic rollback on health check failure. [.github/workflows/deploy-staging.yml:72-75]
 
-- [ ] [AI-Review][HIGH] **Silent Pull Failures**: `docker compose pull` has no error checking (`|| exit 1`). If image pull fails (auth failure, network timeout, image not found), script continues to `docker compose up` which uses OLD images from previous deployment. Deployment appears successful but runs outdated code. [.github/workflows/deploy-staging.yml:68]
+- [ ] [AI-Review][HIGH] **Silent Pull Failures Deploy Old Code**: `docker compose pull` has no error checking (`|| exit 1`). If image pull fails (auth failure, network timeout, image not found), script continues to `docker compose up` which uses OLD images from previous deployment. Deployment appears successful but runs outdated code. Solution: Add `set -e` to script or append `|| exit 1` to pull command. [.github/workflows/deploy-staging.yml:68]
 
-- [ ] [AI-Review][HIGH] **Brittle Health Check**: Fixed 30-second sleep followed by single curl attempt with zero retry logic. If backend takes 31s to start (migrations, connection pools), deployment fails permanently. If transient network error occurs during single curl, deployment fails. Needs retry loop with exponential backoff. [.github/workflows/deploy-staging.yml:74]
+- [ ] [AI-Review][HIGH] **Brittle Single-Attempt Health Check**: Fixed 30-second sleep followed by single curl attempt with zero retry logic. If backend takes 31s to start (migrations, connection pools), deployment fails permanently. If transient network error occurs during single curl, deployment fails. Solution: Implement retry loop with exponential backoff (3-5 retries over 60-90 seconds). [.github/workflows/deploy-staging.yml:74]
 
-- [ ] [AI-Review][HIGH] **Database Migrations Not Automated**: Documentation states migrations are "manual first time" but no automation implemented. When PR includes Prisma schema changes, deployment succeeds but app crashes with "table does not exist" errors. Violates continuous deployment requirements. Backend should run `npx prisma migrate deploy` in entrypoint before starting server. [docs/DEPLOYMENT.md:241-254]
+- [ ] [AI-Review][HIGH] **Database Migrations Not Automated**: Documentation states migrations are "manual first time" but no automation implemented. When PR includes Prisma schema changes, deployment succeeds but app crashes with "table does not exist" errors. Violates continuous deployment requirements. Solution: Add migration step to backend Dockerfile entrypoint (`npx prisma migrate deploy && node dist/index.js`) or add separate migration step in workflow before health check. [docs/DEPLOYMENT.md:241-254]
 
-- [ ] [AI-Review][HIGH] **Wrong NODE_ENV in Production Dockerfile**: Backend Dockerfile line 46 hardcodes `ENV NODE_ENV=development` in production stage. Disables Express production optimizations, exposes verbose error messages with stack traces in API responses, potential security risk. Should be `ENV NODE_ENV=production` with docker-compose override capability. [docker/Dockerfile.backend:46]
+- [ ] [AI-Review][HIGH] **Wrong NODE_ENV in Production Image**: Backend Dockerfile line 46 hardcodes `ENV NODE_ENV=development` in production stage. Disables Express production optimizations, exposes verbose error messages with stack traces in API responses, potential security risk. Solution: Change to `ENV NODE_ENV=production` and allow docker-compose to override for staging with `NODE_ENV=staging`. [docker/Dockerfile.backend:46]
 
-- [ ] [AI-Review][HIGH] **Missing Docker Compose Automation**: Documentation shows staging docker-compose.yml configuration (lines 68-129) but workflow NEVER creates or updates this file on server. Assumes file exists at `/opt/classroom-manager/docker-compose.yml` with correct image tags. Manual setup required, not automated. [docs/DEPLOYMENT.md:68-129]
+- [ ] [AI-Review][HIGH] **Missing Docker Compose Automation**: Documentation shows staging docker-compose.yml configuration (lines 68-129) but workflow NEVER creates or updates this file on server. Assumes file exists at `/opt/classroom-manager/docker-compose.yml` with correct image tags. Manual setup required, breaks automation. Solution: Store docker-compose.yml in repo and scp it to server during deployment, or template it with envsubst. [docs/DEPLOYMENT.md:68-129]
 
-#### HIGH SEVERITY ISSUES
+#### MEDIUM SEVERITY ISSUES
 
-- [ ] [AI-Review][MEDIUM] **Unsafe Docker Prune Timing**: `docker system prune -f` runs immediately after `docker compose up -d` without waiting for old containers to gracefully shutdown (10s default timeout). May remove images still in use by stopping containers, causing unclean shutdowns and potential data loss. Add `sleep 15` before prune or use `docker compose down` before `up`. [.github/workflows/deploy-staging.yml:70]
+- [ ] [AI-Review][MEDIUM] **Unsafe Docker Prune Timing**: `docker system prune -f` runs immediately after `docker compose up -d` without waiting for old containers to gracefully shutdown (10s default timeout). May remove images still in use by stopping containers, causing unclean shutdowns and potential data loss. Solution: Add `sleep 15` before prune or use `docker compose down --remove-orphans` before `up`. [.github/workflows/deploy-staging.yml:70]
 
-- [ ] [AI-Review][MEDIUM] **Superficial Health Check**: Health endpoint returns `{ status: 'healthy' }` without validating database connectivity, Redis connectivity, or Prisma client state. Server returns 200 OK while database is unreachable. Deployment marked successful when app is broken. Should add `await prisma.$queryRaw` and `await redis.ping()`. [packages/backend/src/health.ts:20-30]
+- [ ] [AI-Review][MEDIUM] **Superficial Health Check Endpoint**: Health endpoint returns `{ status: 'healthy' }` without validating database connectivity, Redis connectivity, or Prisma client state. Server returns 200 OK while database is unreachable. Deployment marked successful when app is functionally broken. Solution: Add database ping (`await prisma.$queryRaw\`SELECT 1\``) and Redis ping (`await redis.ping()`) to health check. [packages/backend/src/health.ts:20-30]
 
-- [ ] [AI-Review][MEDIUM] **No Deployment Failure Notifications**: Failed deployments only visible in GitHub Actions UI. No Slack webhook, email, or PagerDuty alert. Team may not notice broken staging environment for hours, blocking QA. Add notification step with `if: failure()` condition. [.github/workflows/deploy-staging.yml:1-76]
+- [ ] [AI-Review][MEDIUM] **No Deployment Failure Notifications**: Failed deployments only visible in GitHub Actions UI. No Slack webhook, email, or PagerDuty alert. Team may not notice broken staging environment for hours, blocking QA testing. Solution: Add notification step with `if: failure()` condition using GitHub Actions Slack integration or webhook. [.github/workflows/deploy-staging.yml:1-76]
 
-- [ ] [AI-Review][MEDIUM] **Manual Tag Management**: Workflow pushes images with `staging-latest` and `staging-{sha}` tags, but staging server docker-compose.yml must be manually configured to reference correct tags. Inconsistent deployment behavior depending on manual configuration. [.github/workflows/deploy-staging.yml:46-48]
+- [ ] [AI-Review][MEDIUM] **Manual Tag Management Creates Drift**: Workflow pushes images with `staging-latest` and `staging-{sha}` tags, but staging server docker-compose.yml must be manually configured to reference correct tags. Creates configuration drift and inconsistent deployment behavior. Solution: Use environment variable substitution or template docker-compose.yml during deployment. [.github/workflows/deploy-staging.yml:46-48]
 
-- [ ] [AI-Review][MEDIUM] **Frontend Health Check Confusion**: Frontend Dockerfile health check (line 39) tries `http://localhost:80/health` which hits nginx static endpoint (nginx.conf:30-34) that always returns "healthy" text. This doesn't verify backend connectivity - container marked healthy even if backend is down. [docker/Dockerfile.frontend:39]
+- [ ] [AI-Review][MEDIUM] **Frontend Health Check Is Meaningless**: Frontend Dockerfile health check (line 39) tries `http://localhost:80/health` which hits nginx static endpoint (nginx.conf:30-34) that always returns "healthy" text. Doesn't verify backend connectivity - container marked healthy even if backend is completely down. Solution: Either remove frontend health check or proxy to backend health endpoint. [docker/Dockerfile.frontend:39, docker/nginx.conf:30-34]
 
 #### LOW SEVERITY ISSUES
 
-- [ ] [AI-Review][LOW] **Hardcoded Repository Name**: Documentation lines 73 and 155 hardcode `nguyen-mau-anh/classroom-manager` instead of using placeholder like `${GITHUB_REPOSITORY}`. Not reusable for forks or renamed repos. [docs/DEPLOYMENT.md:73,155]
+- [ ] [AI-Review][LOW] **Hardcoded Repository Name**: Documentation lines 73 and 155 hardcode `nguyen-mau-anh/classroom-manager` instead of using placeholder like `your-org/your-repo` or `${GITHUB_REPOSITORY}`. Not reusable for forks or renamed repos. Solution: Replace with placeholder text. [docs/DEPLOYMENT.md:73,155]
 
-- [ ] [AI-Review][LOW] **Unrelated Code Changes in Story**: Git diff shows import refactoring in student.routes.ts, student.service.ts, and SubjectForm.tsx (memoryStorage(), parse(), useRef() cleanups) that are unrelated to deployment pipeline story. Pollutes git history and violates single responsibility for commits. Should be separate PR. [packages/backend/src/routes/student.routes.ts, packages/backend/src/services/student.service.ts, packages/frontend/src/components/subjects/SubjectForm.tsx]
+- [ ] [AI-Review][LOW] **Unrelated Code Changes Pollute Story**: Git diff shows import refactoring in student.routes.ts, student.service.ts, and SubjectForm.tsx (memoryStorage(), parse(), useRef() cleanups) that are completely unrelated to deployment pipeline story. Pollutes git history and violates single responsibility principle. Solution: Revert these changes and create separate cleanup PR. [packages/backend/src/routes/student.routes.ts:2,20, packages/backend/src/services/student.service.ts:4,32, packages/frontend/src/components/subjects/SubjectForm.tsx:1,35]
 
-- [ ] [AI-Review][LOW] **Missing .dockerignore**: No .dockerignore file found in repository root. Docker build context includes `.git/`, `node_modules/`, `.env` files, sending unnecessary data to Docker daemon. Slower builds and security risk if .env copied into image. [repository root]
+- [ ] [AI-Review][LOW] **.dockerignore Already Exists**: Review comment about missing .dockerignore is incorrect - file exists at repository root with comprehensive exclusions. No action needed. [.dockerignore:1-64]
 
 ---
 
-**REVIEW SUMMARY**: 15 issues found (7 HIGH, 5 MEDIUM, 3 LOW). Deployment pipeline will work for happy-path scenarios but has multiple critical failure modes: races CI checks, no rollback on failure, silent pull failures deploy old code, brittle single-attempt health check, no migration automation, wrong NODE_ENV in production. **NOT PRODUCTION READY** - requires significant hardening.
+**REVIEW SUMMARY**: 15 findings (7 HIGH, 5 MEDIUM, 3 LOW). Deployment pipeline will work for happy-path scenarios but has multiple critical failure modes that will cause production incidents:
+
+**Critical Gaps:**
+1. **No CI dependency** - deploys code before tests run
+2. **No rollback** - broken deploys stay broken
+3. **Silent failures** - pull errors ignored, old code runs
+4. **No migration automation** - schema changes break app
+5. **Wrong NODE_ENV** - security and performance issues
+
+**Recommendation**: **DO NOT MERGE** until HIGH issues are resolved. Pipeline needs significant hardening before production use. Minimum fixes required: CI dependency, error checking on pull, migration automation, retry logic on health check, and NODE_ENV correction.
 
 ## Status
 reviewed
