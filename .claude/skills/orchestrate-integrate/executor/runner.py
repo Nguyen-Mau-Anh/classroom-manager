@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from .config import ConfigLoader, IntegrateConfig, StageConfig
 from .spawner import ClaudeSpawner, TaskResult
 from .knowledge import KnowledgeBase
+from .story_utils import StoryFileManager, StoryStatus
 
 
 def log(msg: str) -> None:
@@ -64,6 +65,7 @@ class PipelineRunner:
         self.config_loader = ConfigLoader(project_root)
         self.spawner = ClaudeSpawner(project_root)
         self.knowledge = KnowledgeBase(project_root)
+        self.story_manager = StoryFileManager(project_root)
         self.config: Optional[IntegrateConfig] = None
         self.start_time: float = 0
 
@@ -91,7 +93,35 @@ class PipelineRunner:
 
             # Step 1: Resolve story ID and file
             log("\n=== Step 1: Resolving story ===")
-            story_id, story_file = self._resolve_story_input(story_input)
+
+            # Check for incomplete stories first (if no specific story requested)
+            if not story_input:
+                incomplete_stories = self.story_manager.find_incomplete_stories(
+                    self.config.story_locations
+                )
+                if incomplete_stories:
+                    story_id, story_file = incomplete_stories[0]
+                    log(f"  ✓ Found incomplete story: {story_id}")
+                    log(f"  ✓ Will continue working on: {story_file}")
+
+                    # Read and display status
+                    status = self.story_manager.read_story_status(story_file)
+                    if status:
+                        log(f"  ✓ Progress: {status.completed_tasks}/{status.total_tasks} tasks complete")
+                        if status.high_medium_incomplete > 0:
+                            log(f"  ⚠ {status.high_medium_incomplete} HIGH/MEDIUM review items incomplete")
+
+                    # Validate we're not skipping an epic
+                    self._validate_epic_progression(story_id)
+                else:
+                    log("  No incomplete stories found, will create new one")
+
+                    # Before creating new story, validate current epic is complete
+                    self._validate_current_epic_complete()
+
+                    story_id, story_file = self._resolve_story_input(story_input)
+            else:
+                story_id, story_file = self._resolve_story_input(story_input)
 
             # If story_id or story_file is None, we'll handle it in stages
             # (create-story stage will auto-detect)
@@ -147,6 +177,10 @@ class PipelineRunner:
                         result.story_file = str(story_file)
                         log(f"  ✓ Story created: {story_id}")
                         log(f"  ✓ File: {story_file}")
+
+                # Update story status after key stages
+                if story_file and story_id:
+                    self._update_story_status_after_stage(stage_name, story_file, story_id)
 
             # Success!
             result.success = True
@@ -287,6 +321,16 @@ class PipelineRunner:
 
         # Check condition
         if stage.condition == "story_file_not_exists":
+            # Skip create-story if:
+            # 1. Story file exists, OR
+            # 2. There are incomplete stories (we already found one)
+            if story_file is not None and story_file.exists():
+                # Validate the story is not complete
+                status = self.story_manager.read_story_status(story_file)
+                if status and not status.is_complete:
+                    log(f"  ℹ️  Story exists and is incomplete, will continue working on it")
+                    return True  # Skip create-story, use existing file
+
             return story_file is not None and story_file.exists()
 
         if stage.condition == "pr_checks_passed":
@@ -466,3 +510,98 @@ class PipelineRunner:
         if stage_name == "git-push":
             if "branch_name" in stage_result:
                 result.branch_name = stage_result["branch_name"]
+
+    def _update_story_status_after_stage(
+        self,
+        stage_name: str,
+        story_file: Path,
+        story_id: str
+    ) -> None:
+        """Update story file status after key stages complete."""
+        new_status = None
+
+        # Determine new status based on stage
+        if stage_name == "develop":
+            new_status = "ready-to-review"
+            log(f"  📝 Updating story status to: {new_status}")
+
+        elif stage_name == "code-review":
+            # After code review, mark as reviewed (ready for integration)
+            new_status = "reviewed"
+            log(f"  📝 Updating story status to: {new_status}")
+
+        elif stage_name == "unit-test":
+            # After tests pass, mark as done
+            new_status = "done"
+            log(f"  📝 Updating story status to: {new_status}")
+
+        # Update both story file and sprint-status.yaml
+        if new_status:
+            success = self.story_manager.update_story_status(story_file, new_status)
+            if success:
+                self.story_manager.update_sprint_status(story_id, new_status)
+                log(f"  ✓ Story status updated: {new_status}")
+            else:
+                log(f"  ⚠ Failed to update story status")
+
+    def _validate_epic_progression(self, story_id: str) -> None:
+        """
+        Validate we're not skipping stories within an epic.
+
+        Checks that we're working on stories in order within an epic.
+        """
+        epic_id = self.story_manager.get_story_epic(story_id)
+        if not epic_id:
+            return
+
+        log(f"  ℹ️  Validating epic progression for {epic_id}")
+
+        # This is informational - just log if there are other incomplete stories
+        # in the same epic
+        incomplete_stories = self.story_manager.find_incomplete_stories(
+            self.config.story_locations
+        )
+
+        same_epic_incomplete = [
+            (sid, path) for sid, path in incomplete_stories
+            if self.story_manager.get_story_epic(sid) == epic_id and sid != story_id
+        ]
+
+        if same_epic_incomplete:
+            log(f"  ⚠ Warning: {len(same_epic_incomplete)} other stories in {epic_id} are incomplete:")
+            for sid, _ in same_epic_incomplete[:3]:  # Show first 3
+                log(f"    - {sid}")
+
+    def _validate_current_epic_complete(self) -> None:
+        """
+        Validate current epic is complete before creating new story in next epic.
+
+        This prevents creating Epic 2 stories when Epic 1 is incomplete.
+        """
+        log(f"  ℹ️  Validating current epic completion before creating new story")
+
+        incomplete_stories = self.story_manager.find_incomplete_stories(
+            self.config.story_locations
+        )
+
+        if not incomplete_stories:
+            log(f"  ✓ No incomplete stories found, OK to create new story")
+            return
+
+        # Group by epic
+        epic_incomplete: Dict[str, List[str]] = {}
+        for story_id, _ in incomplete_stories:
+            epic_id = self.story_manager.get_story_epic(story_id)
+            if epic_id:
+                if epic_id not in epic_incomplete:
+                    epic_incomplete[epic_id] = []
+                epic_incomplete[epic_id].append(story_id)
+
+        if epic_incomplete:
+            log(f"  ⚠ WARNING: Found incomplete stories in {len(epic_incomplete)} epic(s):")
+            for epic_id, stories in sorted(epic_incomplete.items()):
+                log(f"    {epic_id}: {len(stories)} incomplete")
+                for story_id in stories[:2]:  # Show first 2
+                    log(f"      - {story_id}")
+
+            log(f"  ⚠ Recommendation: Complete these stories before starting new epic")

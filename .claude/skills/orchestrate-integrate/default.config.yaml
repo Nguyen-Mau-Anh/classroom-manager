@@ -136,10 +136,25 @@ stages:
         - Generate tasks and acceptance criteria
 
       If story_id is empty or not provided (auto-detect):
+        CRITICAL: Before creating a NEW story, check for INCOMPLETE stories in current epic:
+
+        STEP 1: Check existing stories in current epic
+        - Look for story files in state/stories/ or docs/stories/
+        - Read each story file and check:
+          * Status field (should be "done")
+          * All tasks checkboxes (- [x] vs - [ ])
+          * All HIGH/MEDIUM priority review items should be checked
+        - If ANY story in current epic is incomplete, ABORT and output error
+
+        STEP 2: Only create new story if current epic is complete
         - Read sprint-status.yaml or epic files
         - Find first story with status: "ready" or "in_progress"
-        - If no ready stories, find first "not_started" epic
-        - Create new story from that epic
+        - If no ready stories in current epic, find first "not_started" epic
+        - Create new story from next epic
+
+        STEP 3: Validate epic progression
+        - Never skip to Epic 2 if Epic 1 has incomplete stories
+        - Check all stories in Epic N are "done" before creating Epic N+1 story
 
       Output: story_id and story_file path
 
@@ -169,6 +184,11 @@ stages:
       - Clear acceptance criteria
       - Well-defined tasks
       - Dependencies documented
+      - Status field is present (should be "not-started", "in-progress", or other valid status)
+
+      IMPORTANT: If story has status="done" and all tasks are checked:
+      - SKIP this story (it's already complete)
+      - Report that story is already done
 
       Output: PASS or FAIL with details.
 
@@ -200,6 +220,13 @@ stages:
       Story ID: {story_id}
 
       Follow red-green-refactor cycle for each task.
+
+      IMPORTANT: As you complete tasks, update the checkboxes in the story file:
+      - Change `- [ ] Task name` to `- [x] Task name` when complete
+      - Update the ## Status field at the end of story file to reflect progress:
+        * "in-progress" while working
+        * The orchestrator will update to "ready-to-review" when develop stage completes
+
       Output: List of files changed and implementation summary.
 
   # Stage 4: Run linting
@@ -368,6 +395,12 @@ stages:
       - Security issues
       - Performance
       - Architecture compliance
+
+      IMPORTANT: Add any findings as checklist items to story file {story_file} under:
+      ### Review Follow-ups (AI)
+      - [ ] [AI-Review][HIGH/MEDIUM/LOW] Description [file:line]
+
+      The orchestrator will update story status to "reviewed" after this stage.
 
       Output: Findings with severity levels.
 
