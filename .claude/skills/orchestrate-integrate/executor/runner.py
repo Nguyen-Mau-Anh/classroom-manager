@@ -413,7 +413,7 @@ class PipelineRunner:
             if result.success:
                 # Track prevention if lessons helped on first try
                 if attempt == 1 and lessons:
-                    lesson_ids = [lesson["lesson_id"] for lesson in lessons]
+                    lesson_ids = [lesson["id"] for lesson in lessons]
                     self.knowledge.track_prevention(stage_name, lesson_ids)
                     log(f"  💡 {len(lessons)} lesson(s) helped prevent errors")
 

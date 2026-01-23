@@ -60,7 +60,14 @@ class StoryFileManager:
             section_status_match = re.search(r'^## Status\s*\n([a-z-]+)', content, re.MULTILINE)
 
             # Determine current status (prioritize metadata over section)
-            if metadata_status_match:
+            # If **Completed:** date exists, that takes highest priority (story is done)
+            if completed_date_match and metadata_status_match:
+                # Both exist - use metadata status
+                current_status = metadata_status_match.group(1).lower()
+            elif completed_date_match:
+                # Has completed date but no metadata status - treat as "completed"
+                current_status = "completed"
+            elif metadata_status_match:
                 current_status = metadata_status_match.group(1).lower()
             elif section_status_match:
                 current_status = section_status_match.group(1)
@@ -127,16 +134,17 @@ class StoryFileManager:
         try:
             content = story_file.read_text()
 
-            # Replace status field (## Status\nold_status -> ## Status\nnew_status)
-            status_pattern = r'^(## Status\s*\n)[a-z-]+(\s*)$'
+            # Pattern to match: ## Status\n<status-value>
+            # This matches across two lines: the header and the status value
+            status_pattern = r'(## Status)\s*\n[a-z][a-z0-9-]*'
 
-            if re.search(status_pattern, content, re.MULTILINE):
+            if re.search(status_pattern, content):
                 # Update existing status
                 new_content = re.sub(
                     status_pattern,
-                    rf'\g<1>{new_status}\2',
+                    rf'\1\n{new_status}',
                     content,
-                    flags=re.MULTILINE
+                    count=1  # Only replace first occurrence
                 )
             else:
                 # Add status section if it doesn't exist
