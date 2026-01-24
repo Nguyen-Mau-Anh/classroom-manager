@@ -420,6 +420,263 @@ class ClaudeSpawner:
                     pass
             return ""
 
+    def spawn_layer(
+        self,
+        layer_skill: str,
+        story_input: Optional[str] = None,
+        timeout: int = 3600
+    ) -> TaskResult:
+        """
+        Spawn another orchestrate layer skill.
+
+        Args:
+            layer_skill: Skill to call (e.g., "/orchestrate-dev" or "/orchestrate-prepare")
+            story_input: Optional story ID or file path to pass to the layer
+            timeout: Max execution time in seconds
+
+        Returns:
+            TaskResult with success/failure
+        """
+        # Build command
+        if story_input:
+            prompt = f"{layer_skill} {story_input}"
+        else:
+            prompt = layer_skill
+
+        print(f"[spawner] Delegating to layer: {layer_skill}", flush=True)
+        if story_input:
+            print(f"[spawner]   Story input: {story_input}", flush=True)
+
+        # Use claude CLI to call the skill
+        cmd = [
+            "claude",
+            "--print",
+            "--permission-mode", "bypassPermissions",
+            "--no-session-persistence",
+            "--output-format", "text",
+            "-p", prompt
+        ]
+
+        # Create temp directory under project root
+        temp_dir = self.project_root / ".orchestrate-temp"
+        temp_dir.mkdir(exist_ok=True)
+
+        # Create temp files for output
+        task_id = f"layer_{layer_skill.replace('/', '_')}_{int(time.time())}"
+        stdout_path = temp_dir / f"{task_id}.stdout"
+        stderr_path = temp_dir / f"{task_id}.stderr"
+
+        stdout_file = open(stdout_path, 'w+')
+        stderr_file = open(stderr_path, 'w+')
+
+        print(f"[spawner] Layer delegation command: {' '.join(cmd[:6])}...", flush=True)
+
+        start_time = time.time()
+        process = None
+
+        # Health monitoring variables
+        last_stdout_size = 0
+        last_stderr_size = 0
+        last_activity_time = time.time()
+        activity_timeout = 300  # 5 minutes without output = likely hung
+
+        # Critical error patterns to detect
+        critical_errors = [
+            "Error: No messages returned",
+            "API request failed",
+            "Connection refused",
+            "ECONNREFUSED",
+        ]
+
+        try:
+            process = subprocess.Popen(
+                cmd,
+                cwd=str(self.project_root),
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                start_new_session=True,
+            )
+
+            print(f"[spawner] Layer process started with PID {process.pid}", flush=True)
+
+            # Track process for cleanup on exit
+            self._all_spawned_processes.append(process)
+
+            # Poll for completion with health monitoring
+            poll_interval = 1.0
+            last_log = time.time()
+            last_health_check = time.time()
+
+            while process.poll() is None:
+                time.sleep(poll_interval)
+                elapsed = time.time() - start_time
+
+                # Periodic logging
+                if time.time() - last_log >= 60:  # Log every minute for layers
+                    print(f"[spawner] Layer {layer_skill} still running ({elapsed:.0f}s)", flush=True)
+                    last_log = time.time()
+
+                # Health check every 10 seconds
+                if time.time() - last_health_check >= 10:
+                    # Flush files to ensure we can read latest content
+                    try:
+                        stdout_file.flush()
+                        stderr_file.flush()
+                    except:
+                        pass
+
+                    # Check for activity (file size changes)
+                    try:
+                        current_stdout_size = os.path.getsize(stdout_path)
+                        current_stderr_size = os.path.getsize(stderr_path)
+
+                        if current_stdout_size != last_stdout_size or current_stderr_size != last_stderr_size:
+                            # Activity detected
+                            last_activity_time = time.time()
+                            last_stdout_size = current_stdout_size
+                            last_stderr_size = current_stderr_size
+                            print(f"[spawner] Activity detected: stdout={current_stdout_size}B, stderr={current_stderr_size}B", flush=True)
+                    except:
+                        pass
+
+                    # Check stderr for critical errors
+                    try:
+                        with open(stderr_path, 'r') as f:
+                            stderr_content = f.read()
+                            for error_pattern in critical_errors:
+                                if error_pattern in stderr_content:
+                                    print(f"[spawner] CRITICAL ERROR DETECTED: {error_pattern}", flush=True)
+                                    print(f"[spawner] Killing process due to unrecoverable error", flush=True)
+                                    self._kill_process_tree(process)
+
+                                    stdout_file.flush()
+                                    stdout_file.close()
+                                    stderr_file.flush()
+                                    stderr_file.close()
+                                    time.sleep(0.1)
+
+                                    stdout_content = self._read_and_cleanup(str(stdout_path))
+                                    stderr_content = self._read_and_cleanup(str(stderr_path))
+
+                                    return TaskResult(
+                                        success=False,
+                                        output=stdout_content,
+                                        error=f"Layer {layer_skill} failed with critical error: {error_pattern}. stderr: {stderr_content}",
+                                        exit_code=-1,
+                                        duration_seconds=time.time() - start_time,
+                                        status=TaskStatus.FAILED,
+                                    )
+                    except:
+                        pass
+
+                    last_health_check = time.time()
+
+                # Check for activity timeout (no output for 5 minutes)
+                time_since_activity = time.time() - last_activity_time
+                if time_since_activity > activity_timeout:
+                    print(f"[spawner] NO ACTIVITY for {time_since_activity:.0f}s - process likely hung", flush=True)
+                    print(f"[spawner] Killing process due to inactivity", flush=True)
+                    self._kill_process_tree(process)
+
+                    stdout_file.flush()
+                    stdout_file.close()
+                    stderr_file.flush()
+                    stderr_file.close()
+                    time.sleep(0.1)
+
+                    stdout_content = self._read_and_cleanup(str(stdout_path))
+                    stderr_content = self._read_and_cleanup(str(stderr_path))
+
+                    return TaskResult(
+                        success=False,
+                        output=stdout_content,
+                        error=f"Layer {layer_skill} hung - no output for {activity_timeout}s. Last output sizes: stdout={last_stdout_size}B, stderr={last_stderr_size}B",
+                        exit_code=-1,
+                        duration_seconds=time.time() - start_time,
+                        status=TaskStatus.TIMEOUT,
+                    )
+
+                # Check for timeout
+                if elapsed > timeout:
+                    print(f"[spawner] Layer {layer_skill} TIMEOUT after {elapsed:.0f}s", flush=True)
+                    self._kill_process_tree(process)
+
+                    stdout_file.flush()
+                    stdout_file.close()
+                    stderr_file.flush()
+                    stderr_file.close()
+                    time.sleep(0.1)
+
+                    stdout_content = self._read_and_cleanup(str(stdout_path))
+                    stderr_content = self._read_and_cleanup(str(stderr_path))
+
+                    return TaskResult(
+                        success=False,
+                        output=stdout_content,
+                        error=f"Layer {layer_skill} timed out after {timeout}s. stderr: {stderr_content}",
+                        exit_code=-1,
+                        duration_seconds=time.time() - start_time,
+                        status=TaskStatus.TIMEOUT,
+                    )
+
+            # Process completed
+            print(f"[spawner] Layer completed, exit_code={process.returncode}", flush=True)
+
+            # Remove from tracking (process is done)
+            if process in self._all_spawned_processes:
+                self._all_spawned_processes.remove(process)
+
+            stdout_file.flush()
+            stdout_file.close()
+            stderr_file.flush()
+            stderr_file.close()
+            time.sleep(0.1)
+
+            stdout_content = self._read_and_cleanup(str(stdout_path))
+            stderr_content = self._read_and_cleanup(str(stderr_path))
+            duration = time.time() - start_time
+
+            print(f"[spawner] Layer output: stdout={len(stdout_content)} chars, stderr={len(stderr_content)} chars", flush=True)
+
+            # Check for success markers in output
+            success = process.returncode == 0 and (
+                "✓" in stdout_content or
+                "SUCCESS" in stdout_content or
+                "complete" in stdout_content.lower()
+            )
+
+            return TaskResult(
+                success=success,
+                output=stdout_content,
+                error=stderr_content if not success else None,
+                exit_code=process.returncode,
+                duration_seconds=duration,
+            )
+
+        except Exception as e:
+            print(f"[spawner] Layer delegation EXCEPTION: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+
+            duration = time.time() - start_time
+            self._kill_process_tree(process)
+            try:
+                stdout_file.close()
+                stderr_file.close()
+            except:
+                pass
+            self._read_and_cleanup(str(stdout_path))
+            self._read_and_cleanup(str(stderr_path))
+
+            return TaskResult(
+                success=False,
+                output="",
+                error=str(e),
+                exit_code=-1,
+                duration_seconds=duration,
+            )
+
     def spawn_stage(
         self,
         stage_name: str,

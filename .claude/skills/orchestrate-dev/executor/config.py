@@ -18,10 +18,11 @@ class StageConfig(BaseModel):
     """Configuration for a single stage."""
     order: float = 0  # Supports fractional ordering (e.g., 3.5 for between 3 and 4)
     enabled: bool = True
-    execution: str = "spawn"  # "spawn" or "direct"
+    execution: str = "spawn"  # "spawn", "direct", or "delegate"
     type: str = "bmad_workflow"  # "bmad_workflow" or "bash"
     workflow: Optional[str] = None
     command: Optional[str] = None
+    delegate_to: Optional[str] = None  # For execution="delegate": skill to call (e.g., "/orchestrate-prepare")
     condition: Optional[str] = None
     timeout: int = 300
     on_failure: str = "abort"  # "abort", "fix_and_retry", "continue"
@@ -40,12 +41,6 @@ class KnowledgeBaseConfig(BaseModel):
     stage_overrides: Optional[Dict[str, Dict[str, int]]] = Field(default_factory=dict)
 
 
-class TaskDecompositionConfig(BaseModel):
-    """Configuration for task decomposition / task-by-task execution."""
-    enabled: bool = True  # Enable auto task decomposition
-    threshold: int = 6  # Decompose if >= N incomplete tasks
-
-
 class DevConfig(BaseModel):
     """Layer 1 configuration model."""
     name: str = "orchestrate-dev"
@@ -53,7 +48,6 @@ class DevConfig(BaseModel):
     description: str = "Story development with quality checks"
     layer: int = 1
 
-    # Autonomy instructions injected into all prompts via {autonomy}
     autonomy_instructions: str = """AUTONOMOUS MODE - NO QUESTIONS.
 Skip all menus, confirmations, and user prompts.
 Execute the task completely and output results only.
@@ -73,11 +67,7 @@ Do not ask follow-up questions."""
         "review_findings", "status"
     ])
 
-    # Knowledge base configuration
     knowledge_base: KnowledgeBaseConfig = Field(default_factory=KnowledgeBaseConfig)
-
-    # Task decomposition configuration
-    task_decomposition: TaskDecompositionConfig = Field(default_factory=TaskDecompositionConfig)
 
 
 class ConfigLoader:

@@ -6,12 +6,13 @@ Complete integration pipeline: Story → Dev → Quality → Git → PR → Merg
 import re
 import time
 import glob
+import subprocess
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass, field
 
 from .config import ConfigLoader, IntegrateConfig, StageConfig
-from .spawner import ClaudeSpawner, TaskResult
+from .spawner import ClaudeSpawner, TaskResult, TaskStatus
 from .knowledge import KnowledgeBase
 
 
@@ -136,6 +137,20 @@ class PipelineRunner:
 
                 # Update result with stage outputs
                 self._update_result_from_stage(result, stage_name, stage_result)
+
+                # If this was a delegated layer, extract outputs from the layer's output
+                stage_config = self.config.stages.get(stage_name)
+                if stage_config and stage_config.execution == "delegate":
+                    layer_output = stage_result.get("output", "")
+                    extracted = self._extract_layer_outputs(layer_output)
+
+                    # Update context variables for subsequent stages
+                    if extracted.get("story_id"):
+                        story_id = extracted["story_id"]
+                        result.story_id = story_id
+                    if extracted.get("story_file"):
+                        story_file = Path(extracted["story_file"])
+                        result.story_file = str(story_file)
 
                 # If create-story just ran, update story_id and story_file
                 if stage_name == "create-story":
@@ -372,9 +387,77 @@ class PipelineRunner:
 
         return {"success": True}
 
+    def _extract_layer_outputs(self, layer_output: str) -> Dict:
+        """
+        Extract story_id and story_file from layer output.
+
+        Looks for patterns like:
+        - "Story ID: 1-2-user-auth"
+        - "Story: 1-2-user-auth"
+        - "Story file: state/stories/1-2-user-auth.md"
+        - "File: state/stories/1-2-user-auth.md"
+        """
+        outputs = {}
+
+        # Try to extract story ID
+        # Pattern 1: "Story ID: <id>"
+        story_id_match = re.search(r'Story ID:\s*(\S+)', layer_output, re.IGNORECASE)
+        if not story_id_match:
+            # Pattern 2: "Story: <id>"
+            story_id_match = re.search(r'Story:\s*(\d+-\d+-[\w-]+)', layer_output)
+
+        if story_id_match:
+            outputs['story_id'] = story_id_match.group(1)
+            log(f"  Extracted story_id: {outputs['story_id']}")
+
+        # Try to extract story file
+        # Pattern 1: "Story file: <path>"
+        story_file_match = re.search(r'Story file:\s*(\S+\.md)', layer_output, re.IGNORECASE)
+        if not story_file_match:
+            # Pattern 2: "File: <path>"
+            story_file_match = re.search(r'File:\s*(\S+\.md)', layer_output)
+
+        if story_file_match:
+            outputs['story_file'] = story_file_match.group(1)
+            log(f"  Extracted story_file: {outputs['story_file']}")
+
+        return outputs
+
     def _execute_stage(self, stage_name: str, stage: StageConfig, **context) -> TaskResult:
-        """Execute a single stage (spawn or direct)."""
-        if stage.execution == "spawn":
+        """Execute a single stage (spawn, direct, or delegate)."""
+        # Handle delegation to another layer
+        if stage.execution == "delegate":
+            if not stage.delegate_to:
+                return TaskResult(
+                    success=False,
+                    output="",
+                    error=f"Stage {stage_name} has execution=delegate but no delegate_to specified",
+                    exit_code=-1
+                )
+
+            # Determine what to pass as story input
+            story_input = context.get("story_id") or context.get("story_file")
+
+            # REFACTORED: Direct Python import instead of subprocess
+            # Instead of spawning `claude --print -p "/orchestrate-dev"`, we directly
+            # import and call the Layer 1 Python executor. This eliminates:
+            # - Unreliable Claude CLI subprocess
+            # - Timeout issues
+            # - Health monitoring complexity
+            # - File descriptor leaks
+
+            if stage.delegate_to == "/orchestrate-dev":
+                return self._delegate_to_layer1(story_input, stage.timeout)
+            else:
+                # Fallback to subprocess for other layers (e.g., /orchestrate-prepare)
+                log(f"  Using subprocess delegation for {stage.delegate_to}")
+                return self.spawner.spawn_layer(
+                    layer_skill=stage.delegate_to,
+                    story_input=story_input,
+                    timeout=stage.timeout
+                )
+
+        elif stage.execution == "spawn":
             return self.spawner.spawn_stage(
                 stage_name=stage_name,
                 timeout=stage.timeout,
@@ -440,6 +523,121 @@ class PipelineRunner:
             return kb_config.stage_overrides[stage_name].get("max_lessons")
 
         return kb_config.max_lessons_per_stage
+
+    def _delegate_to_layer1(self, story_input: Optional[str], timeout: int) -> TaskResult:
+        """
+        Delegate to Layer 1 by calling Python executor directly (NOT via Claude CLI).
+
+        This bypasses the unreliable Claude CLI subprocess and instead calls the
+        Python executor directly via subprocess. Much more reliable because:
+        - No dependency on Claude CLI binary (which can hang)
+        - Standard Python subprocess (reliable, well-tested)
+        - Proper timeout handling via subprocess.run()
+        - Full stderr/stdout capture
+        - Clean exit codes
+        """
+        log(f"  Delegating to Layer 1 (direct Python executor)")
+        if story_input:
+            log(f"    Story input: {story_input}")
+
+        start_time = time.time()
+
+        try:
+            # Build command to run Layer 1 Python executor directly
+            layer1_path = self.project_root / ".claude" / "skills" / "orchestrate-dev"
+
+            # Check if Layer 1 exists
+            if not layer1_path.exists():
+                return TaskResult(
+                    success=False,
+                    output="",
+                    error=f"Layer 1 not found at: {layer1_path}\nPlease install orchestrate-dev skill.",
+                    exit_code=-1,
+                    duration_seconds=0,
+                )
+
+            # Command: python3 -m executor [story_input]
+            cmd = ["python3", "-m", "executor"]
+            if story_input:
+                cmd.append(story_input)
+
+            # Run with proper timeout and capture output
+            result = subprocess.run(
+                cmd,
+                cwd=str(layer1_path),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env={**subprocess.os.environ, "PYTHONPATH": str(layer1_path)}
+            )
+
+            duration = time.time() - start_time
+
+            # Check result
+            if result.returncode == 0:
+                # Success - parse output
+                output_lines = [
+                    f"✓ Layer 1 complete ({duration:.1f}s)",
+                ]
+
+                # Try to extract story info from output
+                if "Story ID:" in result.stdout:
+                    for line in result.stdout.split('\n'):
+                        if "Story ID:" in line or "Story file:" in line:
+                            output_lines.append(f"  {line.strip()}")
+
+                if result.stdout:
+                    output_lines.append(f"\nLayer 1 output:\n{result.stdout}")
+
+                return TaskResult(
+                    success=True,
+                    output="\n".join(output_lines),
+                    error=None,
+                    exit_code=0,
+                    duration_seconds=duration,
+                )
+            else:
+                # Failure
+                error_msg = f"Layer 1 failed with exit code {result.returncode}"
+                if result.stderr:
+                    error_msg += f"\nStderr: {result.stderr}"
+                if result.stdout:
+                    error_msg += f"\nStdout: {result.stdout}"
+
+                return TaskResult(
+                    success=False,
+                    output=result.stdout or "",
+                    error=error_msg,
+                    exit_code=result.returncode,
+                    duration_seconds=duration,
+                )
+
+        except subprocess.TimeoutExpired as e:
+            duration = time.time() - start_time
+            log(f"  ✗ Layer 1 timed out after {timeout}s")
+
+            return TaskResult(
+                success=False,
+                output=e.stdout.decode() if e.stdout else "",
+                error=f"Layer 1 timed out after {timeout}s\nStderr: {e.stderr.decode() if e.stderr else '(none)'}",
+                exit_code=-1,
+                duration_seconds=duration,
+                status=TaskStatus.TIMEOUT,
+            )
+
+        except Exception as e:
+            duration = time.time() - start_time
+            log(f"  ✗ Layer 1 delegation failed: {e}")
+            import traceback
+            traceback.print_exc()
+
+            return TaskResult(
+                success=False,
+                output="",
+                error=f"Layer 1 delegation error: {str(e)}",
+                exit_code=-1,
+                duration_seconds=duration,
+            )
 
     def _update_result_from_stage(self, result: PipelineResult, stage_name: str, stage_result: Dict) -> None:
         """Update pipeline result with stage outputs."""
