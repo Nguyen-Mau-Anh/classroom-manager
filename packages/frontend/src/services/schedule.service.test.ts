@@ -78,7 +78,8 @@ describe('Schedule Service', () => {
 
       const result = await getSchedule();
 
-      void expect(mockedAxios.create).toHaveBeenCalledWith(
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(mockedAxios.create).toHaveBeenCalledWith(
         expect.objectContaining<unknown>({
           baseURL: expect.any(String),
           headers: {
@@ -495,7 +496,8 @@ describe('Schedule Service', () => {
 
       await getSchedule();
 
-      void expect(mockedAxios.create).toHaveBeenCalledWith(
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(mockedAxios.create).toHaveBeenCalledWith(
         expect.objectContaining<unknown>({
           baseURL: expect.any(String),
           headers: {
