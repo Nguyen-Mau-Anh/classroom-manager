@@ -52,8 +52,9 @@ docs/
 npm-debug.log*
 pnpm-debug.log*
 
-# Docker files (no need to include in context)
+# Docker files (exclude most, but keep config files needed in builds)
 docker/
+!docker/nginx.conf
 Dockerfile*
 docker-compose*.yml
 
