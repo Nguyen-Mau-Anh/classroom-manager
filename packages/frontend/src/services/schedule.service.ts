@@ -36,9 +36,7 @@ const createAuthenticatedAxios = (): AxiosInstance => {
   });
 };
 
-export const getSchedule = async (
-  filters?: ScheduleFilters,
-): Promise<ApiResponse<TimeSlot[]>> => {
+export const getSchedule = async (filters?: ScheduleFilters): Promise<ApiResponse<TimeSlot[]>> => {
   const api = createAuthenticatedAxios();
   const response = await api.get('/schedule', { params: filters || {} });
   return response.data;
