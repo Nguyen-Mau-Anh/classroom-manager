@@ -139,7 +139,7 @@ class ClaudeSpawner:
 
         try:
             return stage.prompt.format(**kwargs).strip()
-        except KeyError:
+        except KeyError as e:
             prompt = stage.prompt
             kwargs_with_defaults = {
                 "autonomy": self.config.autonomy_instructions,
@@ -149,6 +149,15 @@ class ClaudeSpawner:
                 "errors": kwargs.get("errors", "{errors}"),
                 "files_changed": kwargs.get("files_changed", "{files_changed}"),
                 "known_issues": kwargs.get("known_issues", ""),  # Default to empty
+                "commit_type": kwargs.get("commit_type", "feat"),  # Default commit type
+                "story_title": kwargs.get("story_title", ""),  # Will be determined by agent
+                "branch_prefix": kwargs.get("branch_prefix", self.config.git_settings.branch_prefix),
+                "base_branch": kwargs.get("base_branch", self.config.git_settings.base_branch),
+                "pr_number": kwargs.get("pr_number", "{pr_number}"),
+                "pr_url": kwargs.get("pr_url", "{pr_url}"),
+                "ci_logs": kwargs.get("ci_logs", "{ci_logs}"),
+                "auto_merge": kwargs.get("auto_merge", str(self.config.pr_settings.auto_merge)),
+                "merge_method": kwargs.get("merge_method", self.config.pr_settings.merge_method),
             }
             return prompt.format(**kwargs_with_defaults).strip()
 
@@ -419,6 +428,165 @@ class ClaudeSpawner:
                 except:
                     pass
             return ""
+
+    def spawn_layer(
+        self,
+        layer_skill: str,
+        story_input: Optional[str] = None,
+        timeout: int = 3600
+    ) -> TaskResult:
+        """
+        Spawn another orchestrate layer skill.
+
+        Args:
+            layer_skill: Skill to call (e.g., "/orchestrate-dev" or "/orchestrate-prepare")
+            story_input: Optional story ID or file path to pass to the layer
+            timeout: Max execution time in seconds
+
+        Returns:
+            TaskResult with success/failure
+        """
+        # Build command
+        if story_input:
+            prompt = f"{layer_skill} {story_input}"
+        else:
+            prompt = layer_skill
+
+        print(f"[spawner] Delegating to layer: {layer_skill}", flush=True)
+        if story_input:
+            print(f"[spawner]   Story input: {story_input}", flush=True)
+
+        # Use claude CLI to call the skill
+        cmd = [
+            "claude",
+            "--print",
+            "--permission-mode", "bypassPermissions",
+            "--no-session-persistence",
+            "--output-format", "text",
+            "-p", prompt
+        ]
+
+        # Create temp directory under project root
+        temp_dir = self.project_root / ".orchestrate-temp"
+        temp_dir.mkdir(exist_ok=True)
+
+        # Create temp files for output
+        task_id = f"layer_{layer_skill.replace('/', '_')}_{int(time.time())}"
+        stdout_path = temp_dir / f"{task_id}.stdout"
+        stderr_path = temp_dir / f"{task_id}.stderr"
+
+        stdout_file = open(stdout_path, 'w+')
+        stderr_file = open(stderr_path, 'w+')
+
+        print(f"[spawner] Layer delegation command: {' '.join(cmd[:6])}...", flush=True)
+
+        start_time = time.time()
+        process = None
+
+        try:
+            process = subprocess.Popen(
+                cmd,
+                cwd=str(self.project_root),
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                start_new_session=True,
+            )
+
+            print(f"[spawner] Layer process started with PID {process.pid}", flush=True)
+
+            # Track process for cleanup on exit
+            self._all_spawned_processes.append(process)
+
+            # Poll for completion
+            poll_interval = 1.0
+            last_log = time.time()
+            while process.poll() is None:
+                time.sleep(poll_interval)
+                elapsed = time.time() - start_time
+
+                if time.time() - last_log >= 60:  # Log every minute for layers
+                    print(f"[spawner] Layer {layer_skill} still running ({elapsed:.0f}s)", flush=True)
+                    last_log = time.time()
+
+                if elapsed > timeout:
+                    print(f"[spawner] Layer {layer_skill} TIMEOUT", flush=True)
+                    self._kill_process_tree(process)
+
+                    stdout_file.flush()
+                    stdout_file.close()
+                    stderr_file.flush()
+                    stderr_file.close()
+                    time.sleep(0.1)
+
+                    stdout_content = self._read_and_cleanup(str(stdout_path))
+                    stderr_content = self._read_and_cleanup(str(stderr_path))
+
+                    return TaskResult(
+                        success=False,
+                        output=stdout_content,
+                        error=f"Layer {layer_skill} timed out after {timeout}s. stderr: {stderr_content}",
+                        exit_code=-1,
+                        duration_seconds=time.time() - start_time,
+                        status=TaskStatus.TIMEOUT,
+                    )
+
+            # Process completed
+            print(f"[spawner] Layer completed, exit_code={process.returncode}", flush=True)
+
+            # Remove from tracking (process is done)
+            if process in self._all_spawned_processes:
+                self._all_spawned_processes.remove(process)
+
+            stdout_file.flush()
+            stdout_file.close()
+            stderr_file.flush()
+            stderr_file.close()
+            time.sleep(0.1)
+
+            stdout_content = self._read_and_cleanup(str(stdout_path))
+            stderr_content = self._read_and_cleanup(str(stderr_path))
+            duration = time.time() - start_time
+
+            print(f"[spawner] Layer output: stdout={len(stdout_content)} chars, stderr={len(stderr_content)} chars", flush=True)
+
+            # Check for success markers in output
+            success = process.returncode == 0 and (
+                "✓" in stdout_content or
+                "SUCCESS" in stdout_content or
+                "complete" in stdout_content.lower()
+            )
+
+            return TaskResult(
+                success=success,
+                output=stdout_content,
+                error=stderr_content if not success else None,
+                exit_code=process.returncode,
+                duration_seconds=duration,
+            )
+
+        except Exception as e:
+            print(f"[spawner] Layer delegation EXCEPTION: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+
+            duration = time.time() - start_time
+            self._kill_process_tree(process)
+            try:
+                stdout_file.close()
+                stderr_file.close()
+            except:
+                pass
+            self._read_and_cleanup(str(stdout_path))
+            self._read_and_cleanup(str(stderr_path))
+
+            return TaskResult(
+                success=False,
+                output="",
+                error=str(e),
+                exit_code=-1,
+                duration_seconds=duration,
+            )
 
     def spawn_stage(
         self,
