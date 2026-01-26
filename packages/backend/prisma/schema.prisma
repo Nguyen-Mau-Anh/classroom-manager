@@ -159,6 +159,8 @@ model TimeSlot {
   @@index([dayOfWeek, startTime])
   @@index([teacherId, dayOfWeek])
   @@index([roomId, dayOfWeek])
+  @@index([classId])
+  @@index([subjectId])
 }
 
 model Enrollment {

@@ -10,6 +10,7 @@ import { requestLogger } from './middlewares/request-logger.middleware';
 import authRoutes from './routes/auth.routes';
 import classRoutes from './routes/class.routes';
 import roomRoutes from './routes/room.routes';
+import scheduleRoutes from './routes/scheduleRoutes';
 import studentRoutes from './routes/student.routes';
 import subjectRoutes from './routes/subject.routes';
 import teacherRoutes from './routes/teacher.routes';
@@ -54,6 +55,9 @@ app.use('/api/rooms', roomRoutes);
 
 // Subject routes
 app.use('/api/subjects', subjectRoutes);
+
+// Schedule routes
+app.use('/api/schedule', scheduleRoutes);
 
 // Root endpoint (uses new response format)
 app.get('/', (_req: Request, res: Response) => {
