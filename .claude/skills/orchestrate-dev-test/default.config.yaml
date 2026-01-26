@@ -1,0 +1,317 @@
+# Orchestrate Dev Test - Layer 2 Configuration
+# =============================================
+# L2 orchestrator that wraps L1 and adds parallel test design + test execution.
+#
+# This file is auto-copied to docs/orchestrate-dev-test.config.yaml on first run.
+# Customize the copy in docs/ folder for your project.
+#
+# Prompt Variables (for spawn stages):
+#   {story_id}      - The story identifier
+#   {story_file}    - Path to story file
+#   {tdm_file}      - Path to TDM file
+#   {test_output}   - Test output/errors
+#   {deploy_url}    - Deployed application URL
+#   {autonomy}      - Auto-injected autonomy instructions
+#   {project_root}  - Absolute path to project root directory
+
+name: orchestrate-dev-test
+version: "1.0.0"
+description: "Layer 2: Development + parallel test design + test execution"
+layer: 2
+wraps: orchestrate-dev
+
+# Autonomy instructions
+autonomy_instructions: |
+  AUTONOMOUS MODE - NO QUESTIONS.
+  Skip all menus, confirmations, and user prompts.
+  Execute the task completely and output results only.
+  Do not ask follow-up questions.
+
+# Story file locations
+story_locations:
+  - "state/stories/${story_id}.md"
+  - "docs/stories/${story_id}.md"
+  - "docs/sprint-artifacts/${story_id}.md"
+
+# Story type filtering - which stories require/skip tests
+story_types:
+  skip:
+    - environment-setup
+    - documentation
+    - config-change
+    - dependency-update
+    - infrastructure
+  require:
+    - feature
+    - bugfix
+    - refactor
+    - api-change
+    - security
+
+# Deployment settings
+deployment:
+  enabled: true
+  health_check_timeout: 60
+  methods:
+    local:
+      - "docker-compose up -d"
+      - "npm run start"
+      - "make run"
+    cloud:
+      - "vercel deploy --prebuilt"
+      - "serverless deploy --stage dev"
+
+# Test execution settings
+test_execution:
+  smoke:
+    command: "npm run test:smoke"
+    timeout: 600
+    required: true
+  critical_sqa:
+    command: "npm run test:sqa:critical"
+    timeout: 900
+    required: true
+  max_fix_attempts: 3
+
+# Output directories
+output:
+  status_dir: "state/l2"
+  test_env_dir: "state/test-env"
+  tdm_dir: "docs/test-design/matrices"
+
+# ============================================
+# STAGES
+# ============================================
+
+stages:
+  # Stage 1: Check if tests are required for this story type
+  check-test-required:
+    order: 1
+    enabled: true
+    execution: direct
+    description: "Check if story type requires tests"
+
+  # Stage 2: Run parallel tracks (L1 dev + test design)
+  parallel-tracks:
+    order: 2
+    enabled: true
+    execution: parallel
+    timeout: 14400  # 4 hours
+    tracks:
+      dev:
+        delegate_to: "/orchestrate-dev"
+        timeout: 10800  # 3 hours
+      test_design:
+        delegate_to: "/orchestrate-test-design"
+        timeout: 1800  # 30 minutes
+    description: "Run L1 dev and test design in parallel"
+
+  # Stage 3: Deploy to test environment
+  deploy:
+    order: 3
+    enabled: true
+    execution: spawn
+    timeout: 600
+    on_failure: abort
+    description: "Deploy application to test environment"
+    prompt: |
+      {autonomy}
+
+      PROJECT ROOT: {project_root}
+      Story ID: {story_id}
+
+      You are a deployment agent. Deploy the application to a local test environment.
+
+      STEP 1: CHECK DEPLOYMENT METHOD
+      Look for deployment configuration in:
+      - docs/architecture.md
+      - package.json scripts
+      - docker-compose.yml
+      - Makefile
+
+      STEP 2: DETERMINE DEPLOYMENT COMMAND
+      Common deployment methods:
+      - docker-compose up -d (if docker-compose.yml exists)
+      - npm run dev (for Node.js apps)
+      - npm run start (for production builds)
+      - make run (if Makefile exists)
+
+      STEP 3: EXECUTE DEPLOYMENT
+      Run the appropriate deployment command.
+
+      STEP 4: HEALTH CHECK
+      Wait for application to be healthy:
+      - Check if main URL responds (e.g., http://localhost:3000)
+      - Check health endpoint if available (e.g., /health, /api/health)
+
+      STEP 5: RECORD DEPLOYMENT INFO
+      Output:
+      - Deployment method used
+      - Application URL
+      - Health check status
+
+  # Stage 4: Generate test scripts from TDM
+  generate-scripts:
+    order: 4
+    enabled: true
+    execution: spawn
+    timeout: 600
+    on_failure: abort
+    description: "Generate test scripts from TDM via TEA"
+    prompt: |
+      {autonomy}
+
+      PROJECT ROOT: {project_root}
+      Story ID: {story_id}
+      TDM File: {tdm_file}
+
+      You are a test automation engineer. Generate test scripts from the TDM.
+
+      STEP 1: READ TDM
+      Read the Test Design Matrix at {tdm_file}.
+      Extract test cases for:
+      - smoke_p0 (P0 smoke tests)
+      - critical_sqa_p1 (P1 critical tests)
+
+      STEP 2: DETERMINE TEST FRAMEWORK
+      Check project for test framework:
+      - Look for jest.config.* (Jest)
+      - Look for playwright.config.* (Playwright)
+      - Look for cypress.config.* (Cypress)
+      - Check package.json dependencies
+
+      STEP 3: GENERATE SMOKE TESTS (P0)
+      For each test in smoke_p0:
+      - Create test file at tests/smoke/{story_id}/*.spec.ts
+      - Follow project test conventions
+      - Include setup/teardown
+
+      STEP 4: GENERATE CRITICAL SQA TESTS (P1)
+      For each test in critical_sqa_p1:
+      - Create test file at tests/sqa/critical/{story_id}/*.spec.ts
+      - Include security tests
+      - Include boundary tests
+
+      STEP 5: VERIFY TEST FILES
+      Ensure all test files are syntactically valid.
+
+      Output: List of generated test files
+
+  # Stage 5: Run smoke tests (P0)
+  smoke-tests:
+    order: 5
+    enabled: true
+    execution: direct
+    command: "npm run test:smoke"
+    timeout: 600
+    on_failure: fix_and_retry
+    retry:
+      max: 3
+    description: "Run P0 smoke tests"
+    prompt: |
+      {autonomy}
+
+      PROJECT ROOT: {project_root}
+      Story ID: {story_id}
+      Deploy URL: {deploy_url}
+
+      TEST FAILURES:
+      ```
+      {test_output}
+      ```
+
+      You are a dev agent fixing smoke test failures.
+
+      IMPORTANT: Fix the APPLICATION CODE, not the tests.
+      Tests are the source of truth - the code must pass them.
+
+      STEP 1: ANALYZE FAILURES
+      Read the test output to understand:
+      - Which tests failed
+      - Expected vs actual behavior
+      - Error messages
+
+      STEP 2: IDENTIFY ROOT CAUSE
+      The issue is in the application code, not tests.
+      Common causes:
+      - Missing functionality
+      - Incorrect implementation
+      - API response format
+      - Edge case handling
+
+      STEP 3: FIX THE CODE
+      - Read the relevant source files
+      - Apply fixes to make tests pass
+      - Use Edit tool to modify files
+
+      STEP 4: REDEPLOY IF NEEDED
+      If deployment is required after fixes:
+      - Rebuild the application
+      - Restart services
+
+      Output: Summary of fixes applied
+
+  # Stage 6: Run critical SQA tests (P1)
+  critical-sqa:
+    order: 6
+    enabled: true
+    execution: direct
+    command: "npm run test:sqa:critical"
+    timeout: 900
+    on_failure: fix_and_retry
+    retry:
+      max: 3
+    description: "Run P1 critical SQA tests"
+    prompt: |
+      {autonomy}
+
+      PROJECT ROOT: {project_root}
+      Story ID: {story_id}
+      Deploy URL: {deploy_url}
+
+      TEST FAILURES:
+      ```
+      {test_output}
+      ```
+
+      You are a dev agent fixing critical SQA test failures.
+
+      IMPORTANT: Fix the APPLICATION CODE, not the tests.
+      These are security and boundary tests - they MUST pass.
+
+      STEP 1: ANALYZE FAILURES
+      Read the test output to understand:
+      - Security test failures (SQL injection, XSS)
+      - Boundary test failures (min/max values)
+      - Edge case failures
+
+      STEP 2: IDENTIFY SECURITY ISSUES
+      For security failures:
+      - Input sanitization missing
+      - Output encoding missing
+      - Validation bypassed
+
+      STEP 3: FIX THE CODE
+      Apply security fixes:
+      - Add input validation
+      - Add output encoding
+      - Add boundary checks
+
+      STEP 4: VERIFY NO REGRESSIONS
+      Ensure fixes don't break other functionality.
+
+      Output: Summary of security/boundary fixes applied
+
+# Output variables captured from execution
+output:
+  - story_id
+  - story_file
+  - dev_status
+  - test_design_status
+  - tdm_file
+  - deploy_url
+  - smoke_status
+  - critical_sqa_status
+  - fix_attempts
+  - ready_for_l3
+  - status
